@@ -1,0 +1,1292 @@
+% !TEX program = uplatex
+\documentclass[uplatex,a4paper,11pt]{jsarticle}
+
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{geometry}
+\usepackage[dvipdfmx,hidelinks]{hyperref}
+
+\geometry{margin=25mm}
+
+\title{鏡面・ガラス反射環境におけるLiDAR観測の\\
+確率的デジタルツイン構築に関する研究計画}
+\author{}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{研究目的}
+
+本研究では、鏡・ガラスを含む環境で取得されたLiDAR観測について、各点を単純に
+「残す／削除する」と決定するのではなく、
+\begin{align}
+  P(G_v=1\mid Z_{1:t}), \\
+  P(O_v=1\mid Z_{1:t})
+\end{align}
+を別々に推定・保持する確率的デジタルツインを構築する。ここで、$G_v$ は
+voxel $v$ に蓄積された観測がghost由来である事象、$O_v$ はvoxel $v$ が実際の
+物理表面によって占有されている事象、$Z_{1:t}$ は時刻1から$t$までの観測を
+表す。
+
+本研究では、観測点が物理的な占有の証拠としてどの程度信頼できるかを確率的に
+評価し、その信頼度を世界座標上で時空間的に統合する。これにより、ghost点を
+物理障害物として誤登録することと、ghostらしい点を一律に削除することで実在物体を
+失うことの双方を抑制する。
+
+また、ghost点の発生はLiDAR点単体の反射強度やreturn情報だけでなく、鏡面・
+ガラス面の位置、境界および外観と関係する。このため本研究では、LiDARのみを用いる
+単一モーダル手法と、LiDAR点群およびカメラ画像を統合するマルチモーダル手法を
+構築し、両者のghost確率推定性能を比較する。
+
+具体的には、LiDARのみを用いた場合の点$i$のghost確率を
+\begin{equation}
+  q_{i,t}^{\mathrm{L}}
+  =
+  P(G_{i,t}=1\mid Z_t^{\mathrm{L}})
+\end{equation}
+とし、LiDARおよびカメラ画像を用いた場合のghost確率を
+\begin{equation}
+  q_{i,t}^{\mathrm{LC}}
+  =
+  P(G_{i,t}=1\mid Z_t^{\mathrm{L}}, I_t)
+\end{equation}
+とする。ここで、$Z_t^{\mathrm{L}}$ は時刻$t$のLiDAR観測、$I_t$ は対応する
+カメラ画像である。
+
+これらの確率を世界座標上のvoxelへ時空間的に統合し、LiDARのみの場合と
+LiDAR--Camera融合の場合について、ghost確率
+$P(G_v=1\mid Z_{1:t})$ および物理占有確率
+$P(O_v=1\mid Z_{1:t})$ の精度を比較する。
+
+以上より、本研究の目的は以下のようにまとめられる。
+
+\begin{quote}
+LiDAR観測点が鏡面反射によるghostである確率を推定し、その確率を世界座標上で
+時空間的に統合することで、反射環境における物理的占有状態の不確実性を表現する
+確率的デジタルツイン構築手法を提案する。さらに、LiDARのみを用いる手法と
+LiDAR--Camera融合手法を比較し、カメラ画像に含まれる鏡面・ガラス面の外観情報が
+ghost確率推定および物理占有状態推定に与える効果を明らかにする。
+\end{quote}
+
+\subsection{使用するデータセットと出典}
+
+本研究では、主データセットとして3DRef（\textit{3D Dataset and Benchmark for
+Reflection Detection in RGB and Lidar Data}）を使用する。3DRefは、鏡、ガラス、
+白板、モニタなどの反射面を含む屋内環境で取得された、RGB画像、multi-return LiDAR点群、
+2D/3D semantic label、LiDAR pose、ラベル付き3D ground-truth meshを含む公開データ
+セットである。公式プロジェクトページでは、3系列の屋内シーケンス、48,024個のラベル付き
+LiDAR点群、3,799枚のラベル付きRGB画像、Ouster、Livox、Hesaiの3種類のLiDARセンサに
+よるデータが提供されている。
+
+本研究では、このうちLiDAR点群、点単位のsemantic label、LiDAR pose、ラベル付き
+3D meshを主に使用する。点単位ラベルはghost確率推定モデルの教師信号として用い、
+LiDAR poseは各点を世界座標系へ変換するために用いる。また、ラベル付き3D meshは
+物理占有状態のground truthを構築するために利用する。
+
+出典は以下の通りである。
+\begin{itemize}
+  \item Xiting Zhao and Sören Schwertfeger, ``3DRef: 3D Dataset and Benchmark for
+  Reflection Detection in RGB and Lidar Data,'' 3DV, 2024。
+  \item 3DRef公式プロジェクトページ：
+  \url{https://3dref.github.io/}
+\end{itemize}
+
+\section{リサーチクエスチョン}
+
+本研究では、以下のリサーチクエスチョンを設定する。
+
+\begin{description}
+
+  \item[RQ1]
+  LiDARの位置、反射強度およびreturn情報のみから、各観測点がghostである確率を
+  どの程度正確かつ適切に校正された形で推定できるか。
+
+  \item[RQ2]
+  LiDAR点群にカメラ画像の外観情報を統合することで、LiDARのみを用いる場合と比較して、
+  ghost点の識別性能および確率校正性能は向上するか。
+
+  \item[RQ3]
+  LiDARのみ、またはLiDAR--Camera融合によって推定したghost確率を世界座標上で
+  時空間的に統合することで、通常のoccupancy mapやハードなghost点除去と比較して、
+  ghostによる偽の占有を抑制しつつ、実在する物体の占有状態を保持できるか。
+
+\end{description}
+
+\section{推定対象とデータから得られる情報}
+
+\subsection{観測レベル}
+
+時刻$t$に取得されたLiDAR点群を
+\begin{align}
+  Z_t^{\mathrm{L}}
+  =
+  \{
+    \bm{z}_{1,t},
+    \ldots,
+    \bm{z}_{N_t,t}
+  \}
+\end{align}
+とする。各LiDAR点は、
+\begin{align}
+  \bm{z}_{i,t}
+  =
+  (x_{i,t},y_{i,t},z_{i,t},I_{i,t}^{\mathrm{L}},r_{i,t})
+\end{align}
+で表す。ここで、$(x,y,z)$はLiDAR座標系における位置、
+$I^{\mathrm{L}}$はLiDARの反射強度、$r$はreturn情報である。
+
+また、時刻$t$にLiDAR点群と対応して取得されたカメラ画像を
+\begin{align}
+  I_t^{\mathrm{C}}
+\end{align}
+とする。
+
+本研究では、各LiDAR点がghostである確率を推定するため、次の2種類の推定器を構築する。
+
+LiDARのみを用いる場合は、
+\begin{align}
+  q_{i,t}^{\mathrm{L}}
+  =
+  P
+  \left(
+    g_{i,t}=1
+    \mid
+    Z_t^{\mathrm{L}}
+  \right)
+\end{align}
+とする。
+
+LiDAR点群とカメラ画像を用いる場合は、
+\begin{align}
+  q_{i,t}^{\mathrm{LC}}
+  =
+  P
+  \left(
+    g_{i,t}=1
+    \mid
+    Z_t^{\mathrm{L}},
+    I_t^{\mathrm{C}}
+  \right)
+\end{align}
+とする。
+
+ここで、$g_{i,t}=1$は、時刻$t$の点$i$が鏡面またはガラス面による
+reflection、すなわちghost点であることを表す。
+
+以降では、使用するモダリティを
+\begin{align}
+  m\in\{\mathrm{L},\mathrm{LC}\}
+\end{align}
+で表し、各推定器の出力を統一的に
+\begin{align}
+  q_{i,t}^{m}
+\end{align}
+と表記する。
+
+\subsection{LiDAR点と画像特徴の対応}
+
+LiDAR--Camera融合手法では、LiDAR点をカメラ画像上へ投影し、各点に対応する画像特徴を
+取得する。
+
+LiDAR座標系の点$\bar{\bm{z}}_{i,t}$をカメラ座標系へ変換し、画像平面へ投影する。
+\begin{align}
+  \bm{u}_{i,t}
+  =
+  \pi
+  \left(
+    \bm{T}_{CL}
+    \bar{\bm{z}}_{i,t}
+  \right)
+\end{align}
+ここで、$\bm{T}_{CL}$はLiDAR座標系からカメラ座標系への外部パラメータ、
+$\pi(\cdot)$はカメラ内部パラメータを用いた射影関数、
+$\bm{u}_{i,t}$は画像上の画素座標である。
+
+カメラ画像から抽出した特徴マップを
+\begin{align}
+  \bm{F}_t^{\mathrm{C}}
+  =
+  h_{\phi}
+  \left(
+    I_t^{\mathrm{C}}
+  \right)
+\end{align}
+とすると、点$i$に対応する画像特徴は、
+\begin{align}
+  \bm{f}_{i,t}^{\mathrm{C}}
+  =
+  \operatorname{Sample}
+  \left(
+    \bm{F}_t^{\mathrm{C}},
+    \bm{u}_{i,t}
+  \right)
+\end{align}
+で取得する。
+
+画像外へ投影される点、カメラから不可視である点、または有効な画像特徴を取得できない点に
+ついては、画像特徴の有効性を表すmask
+\begin{align}
+  a_{i,t}^{\mathrm{C}}
+  \in
+  \{0,1\}
+\end{align}
+を保持する。
+
+\subsection{Voxelレベル}
+
+世界座標系のvoxel $v$について、LiDAR-only手法とLiDAR--Camera融合手法のそれぞれで、
+次の状態を推定する。
+\begin{align}
+  \gamma_{v,t}^{m}
+  &=
+  P
+  \left(
+    G_v=1
+    \mid
+    Z_{1:t}^{m}
+  \right),\\
+  o_{v,t}^{m}
+  &=
+  P
+  \left(
+    O_v=1
+    \mid
+    Z_{1:t}^{m}
+  \right),
+  \qquad
+  m\in\{\mathrm{L},\mathrm{LC}\}.
+\end{align}
+
+ここで、$\gamma_{v,t}^{m}$はvoxel $v$に蓄積された観測がghost由来である確率、
+$o_{v,t}^{m}$はvoxel $v$が物理的に占有されている確率である。
+
+また、各voxelについて、以下の補助情報を保持する。
+\begin{itemize}
+  \item ghost側の累積証拠量
+  \item non-ghost側の累積証拠量
+  \item occupancyの累積証拠量
+  \item 観測フレーム数
+  \item 有効証拠量
+  \item 最終観測時刻
+\end{itemize}
+
+これにより、同じ確率値であっても、観測が少ないため不確実である状態と、多数の観測が
+矛盾している状態を区別する。
+
+\subsection{確率的デジタルツイン上の状態表現}
+
+従来の確率的デジタルツインを
+\begin{align}
+  D_t
+  =
+  \{
+    S_{k,t}
+  \}
+\end{align}
+とし、各構成要素の状態を
+\begin{align}
+  S_{k,t}
+  =
+  \{
+    l_{k,t},
+    c_{k,t},
+    i_{k,t}
+  \}
+\end{align}
+とする。
+
+本研究では、空間を構成するvoxel $v$について、
+\begin{align}
+  S_{v,t}^{m}
+  =
+  \{
+    l_v,
+    c_{v,t},
+    i_v,
+    \gamma_{v,t}^{m},
+    o_{v,t}^{m},
+    e_{v,t}^{m}
+  \}
+\end{align}
+へ拡張する。
+
+ここで、$l_v$はvoxelの空間位置、$c_{v,t}$は意味クラス、
+$i_v$は空間要素の識別子、$\gamma_{v,t}^{m}$はghost由来確率、
+$o_{v,t}^{m}$は物理占有確率、$e_{v,t}^{m}$は有効証拠量である。
+
+\subsection{3DRefから得る情報}
+
+\begin{table}[h]
+  \centering
+  \caption{3DRefの情報と本研究での用途}
+  \begin{tabular}{ll}
+    \toprule
+    3DRefの情報 & 本研究での用途 \\
+    \midrule
+    XYZIR点群
+      & LiDAR-onlyおよびLiDAR--Camera融合モデルの入力 \\
+    点単位6クラスラベル
+      & ghost確率推定モデルの教師信号 \\
+    RGB画像
+      & LiDAR--Camera融合モデルの入力 \\
+    カメラ内部・外部パラメータ
+      & LiDAR点と画像特徴の対応付け \\
+    LiDAR pose
+      & 点群の世界座標への変換 \\
+    時系列フレーム
+      & voxel単位の時空間統合 \\
+    ラベル付き3D mesh
+      & 物理占有状態のground truth \\
+    sequence区分
+      & 未知環境に対する評価 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+主分類には、3DRefの次の6クラスを使用する。
+\begin{align}
+  \mathcal{C}
+  =
+  \{&
+    \mathrm{normal},
+    \mathrm{glass},
+    \mathrm{mirror},
+    \mathrm{other},
+    \mathrm{reflection},
+    \mathrm{obstacle}
+  \}.
+\end{align}
+
+このうち、
+\begin{align}
+  g_{i,t}=1
+  \iff
+  y_{i,t}
+  =
+  \mathrm{reflection}
+\end{align}
+と定義する。
+
+Glass、MirrorおよびObstacle behind Glassは、reflectionとは異なり、
+実際に存在する表面または物体を表すため、ghostではないクラスとして扱う。
+
+LiDAR-only手法とLiDAR--Camera融合手法を公平に比較する主実験では、
+LiDAR点群とRGB画像の対応が得られるフレームのみを使用する。一方、LiDAR-only手法に
+ついては、利用可能な全LiDARフレームを用いた補助実験も行い、学習データ量の増加による
+影響を別途評価する。
+
+\section{全体処理フロー}
+
+本研究では、LiDAR-only手法とLiDAR--Camera融合手法を並列に構築し、点単位、
+voxel単位および物理占有状態の各段階で比較する。
+
+\begin{enumerate}
+  \item 3DRefから、LiDAR点群、RGB画像、点単位ラベル、センサ姿勢および
+        calibration情報を取得する。
+  \item LiDAR-only分類器を用いて、各点の6クラスlogitsを出力する。
+  \item LiDAR--Camera融合分類器を用いて、各点の6クラスlogitsを出力する。
+  \item 各分類器のsoftmax出力を、validationデータを用いて個別に確率校正する。
+  \item 各点について、
+        $q_{i,t}^{\mathrm{L}}$および$q_{i,t}^{\mathrm{LC}}$を得る。
+  \item LiDAR poseにより、各点を世界座標系へ変換する。
+  \item 各手法について、voxelごとにghost証拠を時空間統合する。
+  \item 各手法について、ghost確率
+        $\gamma_{v,t}^{m}$および物理占有確率$o_{v,t}^{m}$を更新する。
+  \item LiDAR-onlyとLiDAR--Camera融合の確率的デジタルツインを比較する。
+\end{enumerate}
+
+\section{第1段階：点ごとのghost確率推定}
+
+\subsection{LiDAR-only分類器}
+
+LiDAR-only分類器は、時刻$t$の点群$Z_t^{\mathrm{L}}$を入力し、各点について
+6クラスのlogitsを出力する。
+\begin{align}
+  \bm{\ell}_{i,t}^{\mathrm{L}}
+  =
+  f_{\theta_{\mathrm{L}}}
+  \left(
+    Z_t^{\mathrm{L}}
+  \right)_i
+  \in
+  \mathbb{R}^{6}.
+\end{align}
+
+softmaxによって、
+\begin{align}
+  p_{i,t}^{\mathrm{L},(c)}
+  =
+  \frac{
+    \exp
+    \left(
+      \ell_{i,t}^{\mathrm{L},(c)}
+    \right)
+  }{
+    \sum_{k=1}^{6}
+    \exp
+    \left(
+      \ell_{i,t}^{\mathrm{L},(k)}
+    \right)
+  }
+\end{align}
+を得る。
+
+未校正のghost確率は、
+\begin{align}
+  q_{i,t}^{\mathrm{L,raw}}
+  =
+  p_{i,t}^{\mathrm{L},(\mathrm{reflection})}
+\end{align}
+である。
+
+\subsection{LiDAR--Camera融合分類器}
+
+LiDAR--Camera融合分類器は、LiDAR点群から抽出した特徴と、対応する画像特徴を統合する。
+
+点$i$のLiDAR特徴を$\bm{f}_{i,t}^{\mathrm{L}}$、画像特徴を
+$\bm{f}_{i,t}^{\mathrm{C}}$とすると、融合特徴を
+\begin{align}
+  \bm{f}_{i,t}^{\mathrm{LC}}
+  =
+  \Phi
+  \left(
+    \bm{f}_{i,t}^{\mathrm{L}},
+    a_{i,t}^{\mathrm{C}}
+    \bm{f}_{i,t}^{\mathrm{C}}
+  \right)
+\end{align}
+とする。ここで、$\Phi(\cdot)$は連結、加重和、attentionなどによる特徴融合関数である。
+
+分類器は、
+\begin{align}
+  \bm{\ell}_{i,t}^{\mathrm{LC}}
+  =
+  f_{\theta_{\mathrm{LC}}}
+  \left(
+    Z_t^{\mathrm{L}},
+    I_t^{\mathrm{C}}
+  \right)_i
+  \in
+  \mathbb{R}^{6}
+\end{align}
+を出力する。
+
+softmaxによって、
+\begin{align}
+  p_{i,t}^{\mathrm{LC},(c)}
+  =
+  \frac{
+    \exp
+    \left(
+      \ell_{i,t}^{\mathrm{LC},(c)}
+    \right)
+  }{
+    \sum_{k=1}^{6}
+    \exp
+    \left(
+      \ell_{i,t}^{\mathrm{LC},(k)}
+    \right)
+  }
+\end{align}
+を得る。
+
+未校正のghost確率は、
+\begin{align}
+  q_{i,t}^{\mathrm{LC,raw}}
+  =
+  p_{i,t}^{\mathrm{LC},(\mathrm{reflection})}
+\end{align}
+である。
+
+\subsection{二値分類ではなく6クラス分類を使用する理由}
+
+本研究で最終的に利用するのはreflectionクラスの確率であるが、学習時には3DRefの
+6クラス分類を行う。
+
+特に、
+\begin{align}
+  \mathrm{reflection}
+  \quad\text{と}\quad
+  \mathrm{obstacle\ behind\ glass}
+\end{align}
+の区別が重要である。
+
+両者はLiDAR上ではガラスや鏡の奥側に観測される可能性があるが、reflectionは実在しない
+ghost点であり、obstacle behind glassは実在する物体である。
+
+カメラ画像は、鏡・ガラス面の境界、外観、透過像および反射像に関する情報を含むため、
+LiDARのみでは困難な両クラスの識別を改善する可能性がある。
+
+\subsection{学習損失}
+
+LiDAR-only分類器とLiDAR--Camera融合分類器の双方について、同一形式の損失関数を用いる。
+\begin{align}
+  \mathcal{L}_{\mathrm{seg}}^{m}
+  =
+  \mathcal{L}_{\mathrm{WCE}}^{m}
+  +
+  \lambda_{\mathrm{Lovasz}}
+  \mathcal{L}_{\mathrm{Lovasz}}^{m},
+  \qquad
+  m\in\{\mathrm{L},\mathrm{LC}\}.
+\end{align}
+
+Weighted Cross Entropyにより、少数クラスであるReflectionの誤分類を重く評価する。
+Lovasz-Softmaxにより、Reflectionを含む各クラスのIoUを改善する。
+
+LiDAR-only手法とLiDAR--Camera融合手法の比較では、可能な限り同じ学習データ、
+データ分割、クラス重み、損失係数および最適化条件を用いる。
+
+\section{第2段階：ghost確率の校正}
+
+各分類器のsoftmax出力は、実際の正解頻度と一致するとは限らない。そのため、
+LiDAR-only分類器とLiDAR--Camera融合分類器について、個別にTemperature Scalingを行う。
+
+モダリティ$m$の校正後確率を、
+\begin{align}
+  \tilde{p}_{i,t}^{m,(c)}
+  =
+  \frac{
+    \exp
+    \left(
+      \ell_{i,t}^{m,(c)}/T_m
+    \right)
+  }{
+    \sum_{k=1}^{6}
+    \exp
+    \left(
+      \ell_{i,t}^{m,(k)}/T_m
+    \right)
+  }
+\end{align}
+とする。
+
+ここで、$T_m$はvalidationデータのNegative Log-Likelihoodを最小化するように推定する。
+
+校正後のghost確率は、
+\begin{align}
+  q_{i,t}^{m}
+  =
+  \tilde{p}_{i,t}^{m,(\mathrm{reflection})},
+  \qquad
+  m\in\{\mathrm{L},\mathrm{LC}\}
+\end{align}
+である。
+
+LiDAR-onlyとLiDAR--Camera融合の比較では、分類精度だけでなく、
+\begin{itemize}
+  \item Negative Log-Likelihood
+  \item Brier score
+  \item Expected Calibration Error
+  \item ReflectionクラスのClasswise ECE
+  \item Reliability diagram
+\end{itemize}
+を評価する。
+
+これにより、カメラ画像の追加が、正解率だけでなく、ghost確率の統計的信頼性を
+改善するかを検証する。
+
+\section{第3段階：世界座標への変換}
+
+各LiDAR点を、LiDAR poseを用いて世界座標系へ変換する。
+\begin{align}
+  \bar{\bm{x}}_{i,t}^{W}
+  =
+  \bm{T}_{WL,t}
+  \bar{\bm{z}}_{i,t}.
+\end{align}
+
+この変換はLiDAR-only手法とLiDAR--Camera融合手法で共通である。したがって、同じ世界座標
+$\bm{x}_{i,t}^{W}$に対して、
+\begin{align}
+  \left(
+    \bm{x}_{i,t}^{W},
+    q_{i,t}^{\mathrm{L}}
+  \right)
+\end{align}
+および
+\begin{align}
+  \left(
+    \bm{x}_{i,t}^{W},
+    q_{i,t}^{\mathrm{LC}}
+  \right)
+\end{align}
+を登録する。
+
+この段階ではghost点の位置補正や鏡面反転は行わない。
+
+\section{第4段階：voxel単位のghost確率統合}
+
+\subsection{単一フレーム内の統合}
+
+voxel $v$に入る点の集合を
+\begin{align}
+  \mathcal{I}_{v,t}
+  =
+  \{
+    i
+    \mid
+    \bm{x}_{i,t}^{W}\in v
+  \}
+\end{align}
+とする。
+
+モダリティ$m$における1フレーム内のghost証拠を、
+\begin{align}
+  \bar{q}_{v,t}^{m}
+  =
+  \frac{
+    \sum_{i\in\mathcal{I}_{v,t}}
+    w_{i,t}^{m}
+    q_{i,t}^{m}
+  }{
+    \sum_{i\in\mathcal{I}_{v,t}}
+    w_{i,t}^{m}
+  }
+\end{align}
+として集約する。
+
+初期実装では、
+\begin{align}
+  w_{i,t}^{m}=1
+\end{align}
+とし、後に距離、return、pose精度、画像特徴の有効性、予測entropyなどを用いた重み付けを
+検討する。
+
+\subsection{時系列統合}
+
+各手法について、voxel $v$のghost確率をBeta分布で表現する。
+\begin{align}
+  \Gamma_v^{m}
+  \sim
+  \operatorname{Beta}
+  \left(
+    \alpha_{v,t}^{m},
+    \beta_{v,t}^{m}
+  \right).
+\end{align}
+
+更新式は、
+\begin{align}
+  \alpha_{v,t}^{m}
+  &=
+  \lambda
+  \alpha_{v,t-1}^{m}
+  +
+  w_{v,t}^{m}
+  \bar{q}_{v,t}^{m},
+  \\
+  \beta_{v,t}^{m}
+  &=
+  \lambda
+  \beta_{v,t-1}^{m}
+  +
+  w_{v,t}^{m}
+  \left(
+    1-\bar{q}_{v,t}^{m}
+  \right)
+\end{align}
+とする。
+
+したがって、
+\begin{align}
+  \gamma_{v,t}^{m}
+  =
+  P
+  \left(
+    G_v=1
+    \mid
+    Z_{1:t}^{m}
+  \right)
+  =
+  \frac{
+    \alpha_{v,t}^{m}
+  }{
+    \alpha_{v,t}^{m}
+    +
+    \beta_{v,t}^{m}
+  }
+\end{align}
+となる。
+
+これは、校正済みの点単位ghost確率をsoft countとして累積する近似的なevidence fusionである。
+
+\subsection{相関した観測の過剰カウントの抑制}
+
+同一フレーム内の近接点および連続フレームの観測は独立ではない。そのため、
+\begin{itemize}
+  \item 1 voxel・1フレームにつき1回だけ更新する
+  \item 1フレームが与える証拠量に上限を設ける
+  \item 時間的または空間的に近接したフレームの重みを下げる
+  \item 画像特徴が無効な点はLiDAR--Camera融合証拠の重みを下げる
+\end{itemize}
+といった処理を行う。
+
+\section{第5段階：物理占有確率の更新}
+
+\subsection{物理表面由来確率}
+
+モダリティ$m$について、点$i$が物理表面に由来する確率を、
+\begin{align}
+  r_{i,t}^{m}
+  =
+  1-q_{i,t}^{m}
+\end{align}
+と近似する。
+
+6クラス確率を明示的に用いる場合は、
+\begin{align}
+  r_{i,t}^{m}
+  ={}&
+  \tilde{p}_{i,t}^{m,(\mathrm{normal})}
+  +
+  \tilde{p}_{i,t}^{m,(\mathrm{glass})}
+  +
+  \tilde{p}_{i,t}^{m,(\mathrm{mirror})}
+  \notag\\
+  &+
+  \tilde{p}_{i,t}^{m,(\mathrm{other})}
+  +
+  \tilde{p}_{i,t}^{m,(\mathrm{obstacle})}.
+\end{align}
+
+6クラスの確率和が1である場合、
+\begin{align}
+  r_{i,t}^{m}
+  =
+  1-q_{i,t}^{m}
+\end{align}
+となる。
+
+\subsection{Log-oddsによる占有更新}
+
+モダリティ$m$に基づくvoxel $v$の占有確率を、
+\begin{align}
+  o_{v,t}^{m}
+  =
+  P
+  \left(
+    O_v=1
+    \mid
+    Z_{1:t}^{m}
+  \right)
+\end{align}
+とする。
+
+そのlog-oddsを、
+\begin{align}
+  L_{v,t}^{O,m}
+  =
+  \log
+  \frac{
+    o_{v,t}^{m}
+  }{
+    1-o_{v,t}^{m}
+  }
+\end{align}
+とする。
+
+LiDAR終端に対するoccupied更新を、
+\begin{align}
+  \Delta L_{v,t}^{\mathrm{hit},m}
+  =
+  w_{i,t}^{m}
+  \left(
+    1-q_{i,t}^{m}
+  \right)
+  l_{\mathrm{hit}}
+\end{align}
+とする。
+
+最終的な占有確率は、
+\begin{align}
+  o_{v,t}^{m}
+  =
+  \sigma
+  \left(
+    L_{v,t}^{O,m}
+  \right)
+\end{align}
+で求める。
+
+\subsection{Free-space更新}
+
+LiDAR原点から観測終端までのray上のvoxelについて、
+\begin{align}
+  \Delta L_{v,t}^{\mathrm{free},m}
+  =
+  w_{i,t}^{m}
+  \left(
+    1-q_{i,t}^{m}
+  \right)
+  l_{\mathrm{free}}
+\end{align}
+とする。ただし、
+\begin{align}
+  l_{\mathrm{free}}<0
+\end{align}
+とする。
+
+ghost確率が高い観測は、終端のoccupied更新だけでなく、ray上のfree-space更新への寄与も
+小さくする。
+
+\section{\texorpdfstring{$P(G_v)$ と $P(O_v)$}{P(Gv) と P(Ov)} の関係}
+
+モダリティ$m$について、$\gamma_{v,t}^{m}$はvoxel $v$へ蓄積された観測の発生原因を表し、
+$o_{v,t}^{m}$はvoxel $v$に物理表面が存在する確率を表す。
+
+\begin{table}[h]
+  \centering
+  \caption{ghost確率と物理占有確率の解釈}
+  \begin{tabular}{lll}
+    \toprule
+    $\gamma_{v,t}^{m}$ & $o_{v,t}^{m}$ & 解釈 \\
+    \midrule
+    低 & 高 & 実在表面として安定して観測される領域 \\
+    高 & 低 & ghostによる偽障害物である可能性が高い領域 \\
+    中 & 中 & 観測起源および物理占有状態が曖昧な領域 \\
+    高 & 高 & 実在表面とghost観測が混在する領域 \\
+    低 & 低 & free空間または未観測領域 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+確率に加え、有効証拠量$e_{v,t}^{m}$を保持することで、観測不足による不確実性と、
+多数の矛盾した観測による不確実性を区別する。
+
+\section{Ground Truthの構築}
+
+\subsection{点単位ghost ground truth}
+
+3DRefの点単位ラベルから、
+\begin{align}
+  g_{i,t}^{*}
+  =
+  \begin{cases}
+    1
+      & y_{i,t}
+        =
+        \mathrm{reflection},
+    \\
+    0
+      & \text{otherwise}
+  \end{cases}
+\end{align}
+とする。
+
+同一の$g_{i,t}^{*}$を、LiDAR-only分類器とLiDAR--Camera融合分類器の教師および評価に
+使用する。
+
+\subsection{Voxel単位ghost ground truth}
+
+正解ラベル付きLiDAR点群を世界座標へ変換し、voxelごとのreflection観測割合を、
+\begin{align}
+  \gamma_v^{*}
+  =
+  \frac{
+    \sum_{i,t:
+      \bm{x}_{i,t}^{W}\in v}
+    g_{i,t}^{*}
+  }{
+    \sum_{i,t:
+      \bm{x}_{i,t}^{W}\in v}
+    1
+  }
+\end{align}
+として求める。
+
+LiDAR-onlyとLiDAR--Camera融合の公平な比較では、両手法に共通して利用できる
+LiDAR--RGB対応フレームのみから$\gamma_v^{*}$を構築する。
+
+\subsection{物理占有ground truth}
+
+ラベル付き3D meshをvoxel化し、
+\begin{align}
+  o_v^{*}
+  =
+  \begin{cases}
+    1
+      & \text{meshがvoxel }v\text{と交差する},
+    \\
+    0
+      & \text{観測可能であり、meshが存在しない},
+    \\
+    \mathrm{unknown}
+      & \text{未観測または判定不能な領域}
+  \end{cases}
+\end{align}
+とする。
+
+LiDAR-onlyおよびLiDAR--Camera融合で同一の$o_v^{*}$を使用する。
+
+\section{実験設計}
+
+\subsection{モダリティ比較}
+
+主比較は、同一のLiDAR--RGB対応フレームを用いて行う。
+
+\begin{table}[h]
+  \centering
+  \caption{モダリティ比較}
+  \begin{tabular}{lll}
+    \toprule
+    手法 & 入力 & 出力 \\
+    \midrule
+    LiDAR-only
+      & XYZIR点群
+      & $q_{i,t}^{\mathrm{L}},
+         \gamma_{v,t}^{\mathrm{L}},
+         o_{v,t}^{\mathrm{L}}$ \\
+    LiDAR--Camera
+      & XYZIR点群＋RGB画像
+      & $q_{i,t}^{\mathrm{LC}},
+         \gamma_{v,t}^{\mathrm{LC}},
+         o_{v,t}^{\mathrm{LC}}$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+比較では、学習データ、testデータ、LiDAR backbone、クラス重み、確率校正方法、
+voxelサイズおよび時系列統合方法を可能な限り共通化する。
+
+\subsection{Occupancy構築手法の比較}
+
+各モダリティについて、次のoccupancy構築手法を比較する。
+
+\begin{table}[h]
+  \centering
+  \caption{Occupancy構築方法の比較}
+  \begin{tabular}{ll}
+    \toprule
+    手法 & ghostの扱い \\
+    \midrule
+    Raw occupancy
+      & 全LiDAR終端をoccupiedとして登録 \\
+    Hard GT removal
+      & 正解Reflection点を除去する理論上限 \\
+    Hard prediction
+      & $q_{i,t}^{m}>\tau$の点を除去 \\
+    Soft single-frame
+      & $(1-q_{i,t}^{m})$で重み付けし、時間統合しない \\
+    Temporal hard
+      & 時系列統合後の$\gamma_{v,t}^{m}$を閾値処理 \\
+    Proposed
+      & 校正済み確率の時系列統合＋soft occupancy \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Ablation}
+
+次の要素についてablation studyを行う。
+\begin{itemize}
+  \item LiDAR-only／LiDAR--Camera融合
+  \item XYZI／XYZIR
+  \item 二値分類／6クラス分類
+  \item 画像特徴なし／画像特徴あり
+  \item 単純な特徴連結／attentionによる融合
+  \item 未校正softmax／校正済み確率
+  \item 単一フレーム／時系列統合
+  \item 単純平均／Beta evidence fusion
+  \item endpointのみ／free-spaceを含むsoft更新
+  \item 相関割引なし／あり
+\end{itemize}
+
+\section{評価指標}
+
+\subsection{点単位ghost推定}
+
+LiDAR-onlyとLiDAR--Camera融合について、同一のtest点を用いて以下を比較する。
+\begin{itemize}
+  \item Reflection Precision
+  \item Reflection Recall
+  \item Reflection F1
+  \item Reflection IoU
+  \item Reflection AUPRC
+  \item ReflectionとObstacle behind Glassの混同行列
+\end{itemize}
+
+特に、LiDARのみでは識別が困難と考えられる
+ReflectionとObstacle behind Glassの混同が、カメラ画像の導入により減少するかを評価する。
+
+\subsection{点単位確率校正}
+
+各手法のghost確率について、
+\begin{itemize}
+  \item Negative Log-Likelihood
+  \item Brier score
+  \item Expected Calibration Error
+  \item ReflectionクラスのClasswise ECE
+  \item Reliability diagram
+\end{itemize}
+を比較する。
+
+\subsection{Voxel単位ghost確率}
+
+$\gamma_{v,t}^{\mathrm{L}}$および$\gamma_{v,t}^{\mathrm{LC}}$について、
+\begin{itemize}
+  \item voxel-level Brier score
+  \item voxel-level NLL
+  \item voxel-level ECE
+  \item voxel-level AUPRC
+  \item 時系列統合に伴う確率変動
+  \item 有効証拠量に対する予測誤差
+\end{itemize}
+を評価する。
+
+\subsection{物理占有状態}
+
+$o_{v,t}^{\mathrm{L}}$および$o_{v,t}^{\mathrm{LC}}$について、
+\begin{itemize}
+  \item Occupancy IoU
+  \item Occupancy Precision
+  \item Occupancy Recall
+  \item Occupancy Brier score
+  \item Occupancy NLL
+  \item False occupied voxel数
+  \item False occupied volume
+  \item 実在occupied voxelのFalse Negative率
+\end{itemize}
+を評価する。
+
+これにより、カメラ画像による点単位ghost推定の改善が、最終的な物理占有状態の推定にも
+寄与するかを検証する。
+
+\section{データ分割}
+
+隣接フレームがtrainとtestへ混在することを避けるため、sequence単位の
+Leave-One-Sequence-Out評価を行う。
+
+\begin{table}[h]
+  \centering
+  \caption{Leave-One-Sequence-Out評価}
+  \begin{tabular}{lll}
+    \toprule
+    Fold & Train／Validation & Test \\
+    \midrule
+    1 & Seq2、Seq3 & Seq1 \\
+    2 & Seq1、Seq3 & Seq2 \\
+    3 & Seq1、Seq2 & Seq3 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+各foldでは、train sequence内から連続した空間・時間区間をvalidationデータとして
+分離する。
+
+LiDAR-onlyとLiDAR--Camera融合の主比較には、LiDAR点群とRGB画像の対応が確認できる
+フレームのみを使用する。test sequenceは、モデル学習、特徴融合方法の選択、
+Temperature Scaling、閾値決定およびvoxelサイズの選択には使用しない。
+
+\section{実装フェーズ}
+
+\subsection{Phase 1：データ対応関係の構築}
+
+3DRefのLiDAR点群、RGB画像、semantic label、LiDAR pose、カメラ内部・外部パラメータを
+読み込み、LiDAR点と画像の対応付けを行う。
+
+完了条件は、LiDAR点を画像上へ投影し、点群と画像の位置関係が視覚的に整合することである。
+
+\subsection{Phase 2：LiDAR-only ghost分類}
+
+LiDAR-only分類器を学習し、
+\begin{align}
+  q_{i,t}^{\mathrm{L,raw}}
+\end{align}
+を出力する。
+
+完了条件は、任意フレームについて6クラスlogitsを保存し、Reflectionクラスの
+Precision、Recall、IoUおよびAUPRCを算出できることである。
+
+\subsection{Phase 3：LiDAR--Camera融合ghost分類}
+
+画像encoder、LiDAR点と画像特徴の対応付け、および特徴融合機構を実装し、
+\begin{align}
+  q_{i,t}^{\mathrm{LC,raw}}
+\end{align}
+を出力する。
+
+完了条件は、LiDAR-only手法と同一のtestデータ上で点単位性能を比較できることである。
+
+\subsection{Phase 4：確率校正}
+
+各分類器に対してTemperature Scalingを行い、
+\begin{align}
+  q_{i,t}^{\mathrm{L}},
+  \qquad
+  q_{i,t}^{\mathrm{LC}}
+\end{align}
+を得る。
+
+完了条件は、校正前後のNLL、Brier score、ECEおよびReliability diagramを比較できる
+ことである。
+
+\subsection{Phase 5：世界座標統合とghost確率地図}
+
+LiDAR poseを用いて点群を世界座標へ変換し、LiDAR-onlyおよびLiDAR--Camera融合の
+それぞれについて、
+\begin{align}
+  \gamma_{v,t}^{\mathrm{L}},
+  \qquad
+  \gamma_{v,t}^{\mathrm{LC}}
+\end{align}
+を構築する。
+
+完了条件は、両手法のvoxel単位ghost確率地図を同一座標系で比較できることである。
+
+\subsection{Phase 6：物理占有確率と最終評価}
+
+各手法について、
+\begin{align}
+  o_{v,t}^{\mathrm{L}},
+  \qquad
+  o_{v,t}^{\mathrm{LC}}
+\end{align}
+を構築し、ラベル付き3D meshから生成したground truthと比較する。
+
+完了条件は、LiDAR-onlyとLiDAR--Camera融合について、点単位、voxel単位および
+occupancy単位の全指標を比較できることである。
+
+\section{研究仮説}
+
+\subsection{H1：カメラ画像によるghost識別性能の向上}
+
+LiDAR--Camera融合手法は、LiDAR-only手法よりもReflectionクラスの識別性能を改善する。
+特に、
+\begin{align}
+  \mathrm{AUPRC}_{\mathrm{LC}}
+  >
+  \mathrm{AUPRC}_{\mathrm{L}}
+\end{align}
+および
+\begin{align}
+  \mathrm{IoU}_{\mathrm{LC}}
+  >
+  \mathrm{IoU}_{\mathrm{L}}
+\end{align}
+を仮説とする。
+
+\subsection{H2：カメラ画像による確率校正性能の向上}
+
+LiDAR--Camera融合手法は、LiDAR-only手法よりもghost確率の校正誤差を低減する。
+\begin{align}
+  \mathrm{Brier}_{\mathrm{LC}}
+  <
+  \mathrm{Brier}_{\mathrm{L}}
+\end{align}
+および
+\begin{align}
+  \mathrm{ECE}_{\mathrm{LC}}
+  <
+  \mathrm{ECE}_{\mathrm{L}}
+\end{align}
+を仮説とする。
+
+\subsection{H3：時系列統合によるghost確率の安定化}
+
+各モダリティにおいて、世界座標上での時系列統合は、単一フレーム推定よりも
+voxel単位のghost確率を改善する。
+\begin{align}
+  \mathrm{NLL}_{\mathrm{temporal}}^{m}
+  <
+  \mathrm{NLL}_{\mathrm{single}}^{m},
+  \qquad
+  m\in\{\mathrm{L},\mathrm{LC}\}
+\end{align}
+を仮説とする。
+
+\subsection{H4：LiDAR--Camera融合による物理占有推定の改善}
+
+LiDAR--Camera融合によるsoft occupancy更新は、LiDAR-onlyによる更新よりも、
+ghostに起因するfalse occupancyを低減する。
+\begin{align}
+  \mathrm{FP}_{\mathrm{LC}}
+  <
+  \mathrm{FP}_{\mathrm{L}}
+\end{align}
+および
+\begin{align}
+  \mathrm{Brier}_{\mathrm{occ,LC}}
+  <
+  \mathrm{Brier}_{\mathrm{occ,L}}
+\end{align}
+を仮説とする。
+
+また、提案するsoft occupancy更新は、ハード除去よりも実在物体の誤除去を抑制する。
+\begin{align}
+  \mathrm{FN}_{\mathrm{soft}}
+  <
+  \mathrm{FN}_{\mathrm{hard}}
+\end{align}
+を仮説とする。
+
+\section{研究の新規性}
+
+本研究の中心的な貢献は、次の4点である。
+\begin{enumerate}
+  \item LiDAR観測点の発生原因を、校正されたghost確率として表現すること。
+  \item LiDAR-onlyとLiDAR--Camera融合について、点単位の分類性能だけでなく、
+        確率校正性能を比較すること。
+  \item ghost確率を世界座標上で時空間的に統合し、確率的デジタルツインの状態として
+        保持すること。
+  \item ghost由来確率と物理占有確率を分離し、カメラ情報の導入が最終的な物理占有状態の
+        推定に与える効果まで評価すること。
+\end{enumerate}
+
+既存のハードなghost除去では、
+\begin{align}
+  \mathrm{ghost}
+  \Rightarrow
+  \mathrm{delete}
+\end{align}
+という二値処理を行う。
+
+本研究では、モダリティ$m$ごとに、
+\begin{align}
+  \mathrm{observation}
+  \Rightarrow
+  \begin{cases}
+    \mathrm{ghost\ evidence}
+      &: q_{i,t}^{m},
+    \\
+    \mathrm{physical\ occupancy\ evidence}
+      &: 1-q_{i,t}^{m}
+  \end{cases}
+\end{align}
+として、判断の不確実性を保持したまま時空間デジタルツインへ統合する。
+
+\section{最終的な研究成果物}
+
+研究終了時には、各voxelについて、LiDAR-only手法およびLiDAR--Camera融合手法の
+それぞれに対し、次の情報を保持する確率的デジタルツインを構築する。
+\begin{itemize}
+  \item voxel coordinate
+  \item ghost probability
+  \item physical occupancy probability
+  \item ghost evidence amount
+  \item non-ghost evidence amount
+  \item physical occupancy evidence amount
+  \item observation count
+  \item effective evidence amount
+  \item last observation time
+\end{itemize}
+
+可視化では、以下を出力する。
+\begin{itemize}
+  \item LiDAR-onlyのghost確率マップ
+  \item LiDAR--Camera融合のghost確率マップ
+  \item 両手法のghost確率差分
+  \item LiDAR-onlyのphysical occupancy map
+  \item LiDAR--Camera融合のphysical occupancy map
+  \item ground-truth occupancyとの差分
+  \item uncertaintyおよびevidence map
+  \item Raw occupancyおよびHard removalとの差分
+\end{itemize}
+
+これにより、カメラ画像の追加がghost点の識別精度に与える効果だけでなく、
+観測不確実性の時空間統合および物理占有状態の推定に与える効果まで、一貫して評価する。
+
+\end{document}

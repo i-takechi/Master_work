@@ -1,0 +1,35 @@
+{
+  "latex-workshop.latex.outDir": "%DIR%",
+  "latex-workshop.latex.recipe.default": "uplatex -> dvipdfmx",
+  "latex-workshop.latex.recipes": [
+    {
+      "name": "uplatex -> dvipdfmx",
+      "tools": [
+        "uplatex",
+        "uplatex",
+        "dvipdfmx"
+      ]
+    }
+  ],
+  "latex-workshop.latex.tools": [
+    {
+      "name": "uplatex",
+      "command": "uplatex",
+      "args": [
+        "-synctex=1",
+        "-interaction=nonstopmode",
+        "-file-line-error",
+        "%DOC%"
+      ]
+    },
+    {
+      "name": "dvipdfmx",
+      "command": "dvipdfmx",
+      "args": [
+        "-o",
+        "%DOCFILE%.pdf",
+        "%DOCFILE%.dvi"
+      ]
+    }
+  ]
+}
