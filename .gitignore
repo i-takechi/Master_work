@@ -1,2 +1,23 @@
+# LaTeX intermediate and auxiliary files
+*.aux
+*.bbl
+*.blg
 *.dvi
-*.gz
+*.fdb_latexmk
+*.fls
+*.log
+*.lof
+*.lot
+*.nav
+*.out
+*.snm
+*.synctex.gz
+*.toc
+*.vrb
+
+# Temporary files created by editors and the OS
+*~
+*.bak
+*.tmp
+.DS_Store
+Thumbs.db

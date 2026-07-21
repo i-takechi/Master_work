@@ -74,25 +74,80 @@ ghost確率推定および物理占有状態推定に与える効果を明らか
 \subsection{使用するデータセットと出典}
 
 本研究では、主データセットとして3DRef（\textit{3D Dataset and Benchmark for
-Reflection Detection in RGB and Lidar Data}）を使用する。3DRefは、鏡、ガラス、
-白板、モニタなどの反射面を含む屋内環境で取得された、RGB画像、multi-return LiDAR点群、
-2D/3D semantic label、LiDAR pose、ラベル付き3D ground-truth meshを含む公開データ
-セットである。公式プロジェクトページでは、3系列の屋内シーケンス、48,024個のラベル付き
-LiDAR点群、3,799枚のラベル付きRGB画像、Ouster、Livox、Hesaiの3種類のLiDARセンサに
-よるデータが提供されている。
+Reflection Detection in RGB and Lidar Data}）\cite{zhao2024_3dref}を使用する。
+データセットの概要と本研究での用途を表\ref{tab:dataset-3dref}に示す。
 
-本研究では、このうちLiDAR点群、点単位のsemantic label、LiDAR pose、ラベル付き
-3D meshを主に使用する。点単位ラベルはghost確率推定モデルの教師信号として用い、
-LiDAR poseは各点を世界座標系へ変換するために用いる。また、ラベル付き3D meshは
-物理占有状態のground truthを構築するために利用する。
+\begin{table}[h]
+  \centering
+  \caption{使用するデータセット3DRefの概要と用途}
+  \label{tab:dataset-3dref}
+  \begin{tabular}{p{0.20\linewidth}p{0.40\linewidth}p{0.30\linewidth}}
+    \toprule
+    項目 & 3DRefの内容 & 本研究での用途 \\
+    \midrule
+    収録環境
+      & 鏡、ガラス、白板、モニタなどの反射面を含む屋内環境
+      & 鏡面・ガラス反射によるghost観測の分析 \\
+    データ規模
+      & 3系列の屋内シーケンス、48,024個のラベル付きLiDAR点群、3,799枚のラベル付きRGB画像
+      & sequence単位の学習・検証・評価 \\
+    LiDARセンサ
+      & Ouster、Livox、Hesaiの3種類のmulti-return LiDAR
+      & センサの違いを含むLiDAR-onlyモデルの入力 \\
+    RGB画像
+      & LiDAR観測に対応する屋内環境のカラー画像
+      & LiDAR--Camera融合モデルの入力 \\
+    Semantic label
+      & 点単位の3Dラベルおよび画像上の2Dラベル
+      & ghost確率推定モデルの教師信号 \\
+    センサ姿勢・校正
+      & LiDAR poseおよびカメラの内部・外部パラメータ
+      & 世界座標への変換およびLiDAR点と画像特徴の対応付け \\
+    3D ground truth
+      & Semantic label付き3D mesh
+      & 物理占有状態のground truth構築 \\
+    出典
+      & 3DRef公式論文・プロジェクトページ\cite{zhao2024_3dref}
+      & データ仕様および公式ベンチマークの参照 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
-出典は以下の通りである。
-\begin{itemize}
-  \item Xiting Zhao and Sören Schwertfeger, ``3DRef: 3D Dataset and Benchmark for
-  Reflection Detection in RGB and Lidar Data,'' 3DV, 2024。
-  \item 3DRef公式プロジェクトページ：
-  \url{https://3dref.github.io/}
-\end{itemize}
+3DRefの公開ベンチマークでは、LiDAR点群セグメンテーションとしてMinkowskiNet、
+SPVCNNおよびCylinder3Dが比較され、return情報を追加したCylinder3Dが全センサ統合条件で
+最も高いmIoUを示している\cite{zhao2024_3dref}。したがって本研究では、
+Cylinder3Dを再現可能な公式ベースラインとして使用し、後述するTransformer型モデルと
+比較する。
+
+\section{関連研究と採用方針}
+
+近年のLiDAR--Camera融合では、両モダリティを共通のBird's-Eye View（BEV）へ変換して
+統合する方法が3D物体検出およびBEV map segmentationの主要な構成となっている
+\cite{liu2023_bevfusion}。しかし、本研究は屋内の壁面、鏡、ガラスおよびその前後に
+分布する点を点単位で分類するため、高さ方向を圧縮するBEV表現を主表現とはしない。
+BEV型手法の「共通座標で統合する」という原理を採用しつつ、3D point/voxel tokenを
+保持する。
+
+LiDAR特徴抽出には、屋内外の点群理解で高い性能と計算効率を示すPTv3
+\cite{wu2024_ptv3}を採用する。カメラ特徴抽出には、dense predictionに適した
+自己教師あり特徴を持つDINOv3\cite{simeoni2025_dinov3}を使用し、3DRefで再学習可能な
+反射面segmentationモデルEBLNet\cite{he2021_eblnet}の出力を補助特徴として加える。
+
+融合では、calibrationに基づく単一点対応だけに依存せず、投影位置周辺から必要な画像特徴を
+選択するcross-attentionを用いる。これは、LiDAR queryによるsoft associationを用いて
+画像劣化や位置ずれへの頑健性を高めるTransFusion\cite{bai2022_transfusion}の考え方を、
+点単位reflection segmentationへ適用するものである。
+
+時系列処理については、過去のLiDAR点と画像特徴をpose補償して利用するTASeg
+\cite{wu2024_taseg}、および共有3D位置符号化とcross-modal memory attentionを用いる
+SAM4D\cite{xu2025_sam4d}を参照する。ただし、3DRefは3系列であり大規模な
+end-to-end時系列Transformerは過学習しやすいため、本研究では短い時間窓に限定した
+Sparse Temporal Transformerとする。
+
+3DRef上ではLiDAR--Camera融合による点単位reflection segmentationの標準的な
+leaderboardがまだ確立していない\cite{zhao2024_3dref}。したがって、異なるタスクの
+最高値を直接「本研究の最高性能」とみなさず、Cylinder3D、PTv3、単純特徴連結、
+cross-attention、時系列統合を同一分割で段階的に比較する。
 
 \section{リサーチクエスチョン}
 
@@ -109,6 +164,11 @@ LiDAR poseは各点を世界座標系へ変換するために用いる。また�
   ghost点の識別性能および確率校正性能は向上するか。
 
   \item[RQ3]
+  世界座標で整列した短時間のLiDAR点特徴および画像特徴をSparse Temporal
+  Transformerで統合することで、単一フレームモデルと比較してghost点の識別性能と
+  確率の時間的一貫性は向上するか。
+
+  \item[RQ4]
   LiDARのみ、またはLiDAR--Camera融合によって推定したghost確率を世界座標上で
   時空間的に統合することで、通常のoccupancy mapやハードなghost点除去と比較して、
   ghostによる偽の占有を抑制しつつ、実在する物体の占有状態を保持できるか。
@@ -189,7 +249,11 @@ reflection、すなわちghost点であることを表す。
 \subsection{LiDAR点と画像特徴の対応}
 
 LiDAR--Camera融合手法では、LiDAR点をカメラ画像上へ投影し、各点に対応する画像特徴を
-取得する。
+取得する。ただし、鏡面反射によるghost点は鏡の奥側の仮想位置に生成されるため、
+通常の実在点と同じ意味での点--画素対応が成立するとは限らない。また、センサ間の視差、
+時刻ずれ、calibration誤差および遮蔽により、単一画素からのhard samplingは不安定に
+なり得る。このため、単純連結を比較用ベースラインとし、主手法では投影位置周辺の
+複数画像tokenから特徴を選択する局所cross-attentionを用いる。
 
 LiDAR座標系の点$\bar{\bm{z}}_{i,t}$をカメラ座標系へ変換し、画像平面へ投影する。
 \begin{align}
@@ -205,7 +269,7 @@ LiDAR座標系の点$\bar{\bm{z}}_{i,t}$をカメラ座標系へ変換し、画�
 $\pi(\cdot)$はカメラ内部パラメータを用いた射影関数、
 $\bm{u}_{i,t}$は画像上の画素座標である。
 
-カメラ画像から抽出した特徴マップを
+カメラ画像から抽出した多段特徴マップを
 \begin{align}
   \bm{F}_t^{\mathrm{C}}
   =
@@ -214,7 +278,7 @@ $\bm{u}_{i,t}$は画像上の画素座標である。
     I_t^{\mathrm{C}}
   \right)
 \end{align}
-とすると、点$i$に対応する画像特徴は、
+とすると、単純連結ベースラインにおける点$i$の画像特徴は、
 \begin{align}
   \bm{f}_{i,t}^{\mathrm{C}}
   =
@@ -225,6 +289,24 @@ $\bm{u}_{i,t}$は画像上の画素座標である。
   \right)
 \end{align}
 で取得する。
+
+主手法では、投影位置$\bm{u}_{i,t}$の周辺領域
+$\mathcal{N}(\bm{u}_{i,t})$から得る画像tokenを
+$\bm{K}_{i,t}^{\mathrm{C}}$および$\bm{V}_{i,t}^{\mathrm{C}}$とし、
+LiDAR点特徴をqueryとする。
+\begin{align}
+  \bm{c}_{i,t}
+  =
+  \operatorname{CrossAttn}
+  \left(
+    \bm{W}_{q}\bm{f}_{i,t}^{\mathrm{L}},
+    \bm{K}_{i,t}^{\mathrm{C}},
+    \bm{V}_{i,t}^{\mathrm{C}}
+  \right).
+\end{align}
+このsoft associationは、単一の投影対応へ強く依存せずに有用な画像特徴を選択する
+構成であり、Transformerを用いたLiDAR--Camera融合で有効性が示されている
+\cite{bai2022_transfusion}。
 
 画像外へ投影される点、カメラから不可視である点、または有効な画像特徴を取得できない点に
 ついては、画像特徴の有効性を表すmask
@@ -386,9 +468,13 @@ voxel単位および物理占有状態の各段階で比較する。
 \begin{enumerate}
   \item 3DRefから、LiDAR点群、RGB画像、点単位ラベル、センサ姿勢および
         calibration情報を取得する。
-  \item LiDAR-only分類器を用いて、各点の6クラスlogitsを出力する。
-  \item LiDAR--Camera融合分類器を用いて、各点の6クラスlogitsを出力する。
-  \item 各分類器のsoftmax出力を、validationデータを用いて個別に確率校正する。
+  \item PTv3を用いて、XYZIR点群からLiDAR点特徴を抽出する。
+  \item 事前学習済み画像encoderを用いて、RGB画像からdenseな画像特徴を抽出する。
+  \item LiDAR-only分岐ではLiDAR点特徴から、LiDAR--Camera分岐では局所
+        cross-attentionおよび信頼度gateによる融合特徴から、6クラスlogitsを出力する。
+  \item LiDAR poseで整列した近傍フレームのvoxel tokenをSparse Temporal
+        Transformerで統合し、点単位logitsを更新する。
+  \item 各分類器の最終logitsを、validationデータを用いて個別に確率校正する。
   \item 各点について、
         $q_{i,t}^{\mathrm{L}}$および$q_{i,t}^{\mathrm{LC}}$を得る。
   \item LiDAR poseにより、各点を世界座標系へ変換する。
@@ -403,7 +489,15 @@ voxel単位および物理占有状態の各段階で比較する。
 \subsection{LiDAR-only分類器}
 
 LiDAR-only分類器は、時刻$t$の点群$Z_t^{\mathrm{L}}$を入力し、各点について
-6クラスのlogitsを出力する。
+6クラスのlogitsを出力する。主手法のbackboneにはPoint Transformer V3
+（PTv3）\cite{wu2024_ptv3}を用いる。PTv3は点群を空間充填曲線によりserializationし、
+広い受容野を持つattentionを効率的に計算できるため、鏡・ガラス面の局所的なreturn特性と、
+面の前後に分布するghost点の広域的な幾何関係を同時に扱えると期待される。
+入力特徴にはXYZIRに加え、sensor ID、rangeおよび有効return maskを用いる。
+
+一方、3DRef公式ベンチマークで高い性能を示すCylinder3Dを非Transformer型の
+主要ベースラインとする\cite{zhao2024_3dref}。これにより、Transformerの導入効果と
+LiDAR--Camera融合の効果を分離して評価する。
 \begin{align}
   \bm{\ell}_{i,t}^{\mathrm{L}}
   =
@@ -458,7 +552,50 @@ $\bm{f}_{i,t}^{\mathrm{C}}$とすると、融合特徴を
     \bm{f}_{i,t}^{\mathrm{C}}
   \right)
 \end{align}
-とする。ここで、$\Phi(\cdot)$は連結、加重和、attentionなどによる特徴融合関数である。
+とする。ここで、単純連結は比較用ベースラインとし、主手法の$\Phi(\cdot)$には
+局所cross-attentionと信頼度gateを使用する。
+
+\subsection{画像encoder}
+
+画像encoderには、自己教師あり学習によりdenseな局所特徴を獲得したDINOv3
+\cite{simeoni2025_dinov3}を用いる。3DRefで利用可能なRGB画像数はLiDARフレーム数より
+少ないため、初期実装では事前学習済みencoderを凍結し、特徴射影層および融合層のみを
+学習する。その後、validation性能を監視しながら上位blockのfine-tuningを検討する。
+
+また、画像上のglass、mirrorおよびother reflectiveの位置を明示的に与える補助特徴として、
+3DRefで再学習したEBLNetによる反射面確率mapを使用する
+\cite{he2021_eblnet,zhao2024_3dref}。DINOv3特徴のみ、反射面確率のみ、両者の併用を
+ablationで比較する。
+
+\subsection{局所cross-attentionと信頼度gate}
+
+点$i$の投影位置周辺にある複数スケールの画像tokenに対して、LiDAR点特徴をqueryとする
+局所cross-attentionを適用する。融合された画像文脈$\bm{c}_{i,t}$の利用率を、
+\begin{align}
+  \rho_{i,t}
+  =
+  \sigma
+  \left(
+    \operatorname{MLP}
+    \left[
+      \bm{f}_{i,t}^{\mathrm{L}},
+      \bm{c}_{i,t},
+      a_{i,t}^{\mathrm{C}},
+      H_{i,t}^{\mathrm{C}}
+    \right]
+  \right)
+\end{align}
+とする。ここで、$H_{i,t}^{\mathrm{C}}$は画像分岐の予測entropyまたは不確実性である。
+最終的な融合特徴は、
+\begin{align}
+  \bm{f}_{i,t}^{\mathrm{LC}}
+  =
+  \bm{f}_{i,t}^{\mathrm{L}}
+  \rho_{i,t}
+  \bm{W}_{o}\bm{c}_{i,t}
+\end{align}
+とする。画像外、遮蔽、画像側の高entropyまたは投影不整合がある場合には
+$\rho_{i,t}$を小さくし、LiDAR主体の推定へ連続的に戻れる構成とする。
 
 分類器は、
 \begin{align}
@@ -540,10 +677,63 @@ Lovasz-Softmaxにより、Reflectionを含む各クラスのIoUを改善する�
 LiDAR-only手法とLiDAR--Camera融合手法の比較では、可能な限り同じ学習データ、
 データ分割、クラス重み、損失係数および最適化条件を用いる。
 
-\section{第2段階：ghost確率の校正}
+\section{第2段階：短期時系列Transformer}
+
+\subsection{世界座標で整列した時系列token}
+
+単一フレームの点特徴だけでなく、LiDAR poseを用いて近傍フレームを現在時刻の
+世界座標へ整列し、voxelごとに特徴を集約する。時刻$t$のvoxel $v$におけるtokenを
+$\bm{h}_{v,t}^{m}$とし、過去$K$フレームの同一または近傍voxelを参照する
+Sparse Temporal Transformerを構築する。
+\begin{align}
+  \hat{\bm{h}}_{v,t}^{m}
+  =
+  \operatorname{TemporalAttn}
+  \left(
+    \bm{h}_{v,t}^{m},
+    \left\{
+      \bm{h}_{v',t-k}^{m}
+      +
+      \operatorname{PE}
+      \left(
+        \bm{x}_{v'}-\bm{x}_{v},
+        \Delta t
+      \right)
+    \right\}_{(v',k)\in\mathcal{N}_{v,t}}
+  \right).
+\end{align}
+ここで、$\mathcal{N}_{v,t}$は空間近傍と時間窓で制限した参照token集合である。
+全点間attentionは計算量が大きく、3DRefの系列数に対して過学習しやすいため使用しない。
+初期実装では$K=3$または$5$とし、静的環境を主対象としてpose補償後の局所attentionを
+行う。
+
+時間的LiDAR点と画像特徴の統合はLiDAR semantic segmentationにおいて高い性能を示して
+おり\cite{wu2024_taseg}、共有3D位置表現とmemory attentionを組み合わせる設計も
+提案されている\cite{xu2025_sam4d}。本研究ではこれらの考え方を小規模な
+voxel-level attentionとして実装し、点特徴へ補間して最終logitsを出力する。
+
+\subsection{短期学習と長期確率統合の役割分担}
+
+Sparse Temporal Transformerは数フレームの文脈から点単位分類を改善する
+学習型の短期統合として用いる。一方、後述するBeta evidence fusionは、校正済み確率を
+長期間にわたって解釈可能な形で蓄積する地図側の統合として維持する。すなわち、
+\begin{align}
+  \text{single-frame feature}
+  \rightarrow
+  \text{temporal feature}
+  \rightarrow
+  \text{calibrated probability}
+  \rightarrow
+  \text{Beta evidence fusion}
+\end{align}
+の順に処理する。
+
+\section{第3段階：ghost確率の校正}
 
 各分類器のsoftmax出力は、実際の正解頻度と一致するとは限らない。そのため、
-LiDAR-only分類器とLiDAR--Camera融合分類器について、個別にTemperature Scalingを行う。
+LiDAR-only分類器とLiDAR--Camera融合分類器について、短期時系列処理後の最終logitsに
+個別にTemperature Scalingを行う。単一フレーム条件については単一フレームlogitsを
+校正し、異なる推論条件のtemperatureを共有しない。
 
 モダリティ$m$の校正後確率を、
 \begin{align}
@@ -589,7 +779,7 @@ LiDAR-onlyとLiDAR--Camera融合の比較では、分類精度だけでなく、
 これにより、カメラ画像の追加が、正解率だけでなく、ghost確率の統計的信頼性を
 改善するかを検証する。
 
-\section{第3段階：世界座標への変換}
+\section{第4段階：世界座標への変換}
 
 各LiDAR点を、LiDAR poseを用いて世界座標系へ変換する。
 \begin{align}
@@ -618,7 +808,7 @@ $\bm{x}_{i,t}^{W}$に対して、
 
 この段階ではghost点の位置補正や鏡面反転は行わない。
 
-\section{第4段階：voxel単位のghost確率統合}
+\section{第5段階：voxel単位のghost確率統合}
 
 \subsection{単一フレーム内の統合}
 
@@ -725,7 +915,7 @@ voxel $v$に入る点の集合を
 \end{itemize}
 といった処理を行う。
 
-\section{第5段階：物理占有確率の更新}
+\section{第6段階：物理占有確率の更新}
 
 \subsection{物理表面由来確率}
 
@@ -930,24 +1120,31 @@ LiDAR-onlyおよびLiDAR--Camera融合で同一の$o_v^{*}$を使用する。
 
 \begin{table}[h]
   \centering
-  \caption{モダリティ比較}
+  \caption{主要モデル比較}
   \begin{tabular}{lll}
     \toprule
-    手法 & 入力 & 出力 \\
+    手法 & 特徴抽出・融合 & 位置付け \\
     \midrule
-    LiDAR-only
-      & XYZIR点群
-      & $q_{i,t}^{\mathrm{L}},
-         \gamma_{v,t}^{\mathrm{L}},
-         o_{v,t}^{\mathrm{L}}$ \\
-    LiDAR--Camera
-      & XYZIR点群＋RGB画像
-      & $q_{i,t}^{\mathrm{LC}},
-         \gamma_{v,t}^{\mathrm{LC}},
-         o_{v,t}^{\mathrm{LC}}$ \\
+    Cylinder3D
+      & XYZIR
+      & 3DRef公式ベースライン \\
+    PTv3 LiDAR-only
+      & PTv3＋XYZIR
+      & Transformer特徴抽出 \\
+    PTv3 Concat
+      & PTv3＋画像特徴連結
+      & 単純融合ベースライン \\
+    Proposed
+      & PTv3＋局所cross-attention＋gate
+      & 主提案手法 \\
     \bottomrule
   \end{tabular}
 \end{table}
+
+各モデルから、対応する
+$q_{i,t}^{m}$、$\gamma_{v,t}^{m}$および$o_{v,t}^{m}$を構築する。
+主比較では、LiDAR-onlyとLiDAR--CameraでPTv3の容量、時間窓、学習データおよび
+地図更新条件を共通化する。
 
 比較では、学習データ、testデータ、LiDAR backbone、クラス重み、確率校正方法、
 voxelサイズおよび時系列統合方法を可能な限り共通化する。
@@ -985,11 +1182,16 @@ voxelサイズおよび時系列統合方法を可能な限り共通化する。
 \begin{itemize}
   \item LiDAR-only／LiDAR--Camera融合
   \item XYZI／XYZIR
+  \item Cylinder3D／PTv3
   \item 二値分類／6クラス分類
-  \item 画像特徴なし／画像特徴あり
-  \item 単純な特徴連結／attentionによる融合
+  \item 画像特徴なし／DINOv3特徴／EBLNet反射面確率／両者
+  \item DINOv3凍結／上位blockのfine-tuning
+  \item 単純な特徴連結／局所cross-attention
+  \item 信頼度gateなし／あり
+  \item 単一スケール画像token／複数スケール画像token
   \item 未校正softmax／校正済み確率
-  \item 単一フレーム／時系列統合
+  \item 単一フレーム／Sparse Temporal Transformer
+  \item 時間窓$K=1,3,5$
   \item 単純平均／Beta evidence fusion
   \item endpointのみ／free-spaceを含むsoft更新
   \item 相関割引なし／あり
@@ -1092,28 +1294,40 @@ Temperature Scaling、閾値決定およびvoxelサイズの選択には使用�
 
 \subsection{Phase 2：LiDAR-only ghost分類}
 
-LiDAR-only分類器を学習し、
+Cylinder3D＋XYZIRの公式ベースラインを再現した後、PTv3＋XYZIRのLiDAR-only分類器を
+学習し、
 \begin{align}
   q_{i,t}^{\mathrm{L,raw}}
 \end{align}
 を出力する。
 
-完了条件は、任意フレームについて6クラスlogitsを保存し、Reflectionクラスの
-Precision、Recall、IoUおよびAUPRCを算出できることである。
+完了条件は、両backboneについて任意フレームの6クラスlogitsを保存し、
+ReflectionクラスのPrecision、Recall、IoUおよびAUPRCを同一testデータで比較できる
+ことである。
 
-\subsection{Phase 3：LiDAR--Camera融合ghost分類}
+\subsection{Phase 3：TransformerによるLiDAR--Camera融合}
 
-画像encoder、LiDAR点と画像特徴の対応付け、および特徴融合機構を実装し、
+DINOv3画像encoder、EBLNet反射面確率map、LiDAR点と局所画像tokenの対応付け、
+cross-attentionおよび信頼度gateを実装し、
 \begin{align}
   q_{i,t}^{\mathrm{LC,raw}}
 \end{align}
 を出力する。
 
-完了条件は、LiDAR-only手法と同一のtestデータ上で点単位性能を比較できることである。
+完了条件は、単純特徴連結と提案融合手法をLiDAR-only手法と同一のtestデータ上で比較し、
+画像特徴が無効または不確実な点におけるgateの挙動を可視化できることである。
 
-\subsection{Phase 4：確率校正}
+\subsection{Phase 4：短期時系列Transformer}
 
-各分類器に対してTemperature Scalingを行い、
+LiDAR poseによって近傍フレームを整列し、voxel tokenに対するSparse Temporal
+Transformerを実装する。単一フレーム、$K=3$および$K=5$を比較する。
+
+完了条件は、各モダリティについて単一フレームと時系列モデルのReflection IoU、
+AUPRCおよび計算量を比較できることである。
+
+\subsection{Phase 5：確率校正}
+
+単一フレームおよび時系列モデルの最終logitsに対して、それぞれTemperature Scalingを行い、
 \begin{align}
   q_{i,t}^{\mathrm{L}},
   \qquad
@@ -1124,7 +1338,7 @@ Precision、Recall、IoUおよびAUPRCを算出できることである。
 完了条件は、校正前後のNLL、Brier score、ECEおよびReliability diagramを比較できる
 ことである。
 
-\subsection{Phase 5：世界座標統合とghost確率地図}
+\subsection{Phase 6：世界座標統合とghost確率地図}
 
 LiDAR poseを用いて点群を世界座標へ変換し、LiDAR-onlyおよびLiDAR--Camera融合の
 それぞれについて、
@@ -1137,7 +1351,7 @@ LiDAR poseを用いて点群を世界座標へ変換し、LiDAR-onlyおよびLiD
 
 完了条件は、両手法のvoxel単位ghost確率地図を同一座標系で比較できることである。
 
-\subsection{Phase 6：物理占有確率と最終評価}
+\subsection{Phase 7：物理占有確率と最終評価}
 
 各手法について、
 \begin{align}
@@ -1225,12 +1439,16 @@ ghostに起因するfalse occupancyを低減する。
 
 \section{研究の新規性}
 
-本研究の中心的な貢献は、次の4点である。
+本研究の中心的な貢献は、次の5点である。
 \begin{enumerate}
   \item LiDAR観測点の発生原因を、校正されたghost確率として表現すること。
+  \item PTv3による点群特徴、DINOv3および反射面確率による画像特徴を、局所
+        cross-attentionと信頼度gateで統合し、反射環境特有の不確かな点--画素対応を
+        softに扱うこと。
   \item LiDAR-onlyとLiDAR--Camera融合について、点単位の分類性能だけでなく、
         確率校正性能を比較すること。
-  \item ghost確率を世界座標上で時空間的に統合し、確率的デジタルツインの状態として
+  \item Sparse Temporal Transformerによる短期特徴統合と、Beta evidence fusionによる
+        長期確率統合を役割分担させ、ghost確率を確率的デジタルツインの状態として
         保持すること。
   \item ghost由来確率と物理占有確率を分離し、カメラ情報の導入が最終的な物理占有状態の
         推定に与える効果まで評価すること。
@@ -1288,5 +1506,9 @@ ghostに起因するfalse occupancyを低減する。
 
 これにより、カメラ画像の追加がghost点の識別精度に与える効果だけでなく、
 観測不確実性の時空間統合および物理占有状態の推定に与える効果まで、一貫して評価する。
+
+\clearpage
+\bibliographystyle{junsrt}
+\bibliography{research_plan}
 
 \end{document}
