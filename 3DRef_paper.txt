@@ -1,0 +1,625 @@
+                                                                                                        r •
+                                                                                                   Cente
+                                                                                              tics
+                                                                                            bo
+                                                                                          Ro
+arXiv:2403.06538v1 [cs.RO] 11 Mar 2024
+
+
+
+                                                                                      d
+                                                                                    an
+                                                                               tion
+                                                                   iTech Automa
+                                                               ngha
+                                                            Sha
+                                                                                          STAR CENTER
+                                                                                             MARS LAB
+
+
+
+
+                                                                                                     3DRef: 3D Dataset and Benchmark for
+                                                                                                   Reflection Detection in RGB and Lidar Data
+
+                                                                                                              Xiting Zhao and Sören Schwertfeger
+
+
+
+                                                                                                                      Accepted for:
+                                                           International Conference on 3D Vision (3DV) 2024
+
+
+
+
+                                         Citation:
+
+                                         Xiting Zhao and Sören Schwertfeger, ”3DRef: 3D Dataset and Benchmark for Reflection Detection in RGB and Lidar
+                                         Data”, International Conferenceon 3D Vision (3DV) 2024: IEEEPress, 2024.
+
+
+
+
+                                         This is a publication from the Mobile Autonomous Robotic Systems Lab (MARS Lab), School of Information Science
+                                         and Technology (SIST) of ShanghaiTech University. For this and other publications from the MARS Lab please visit:
+                                         https://robotics.shanghaitech.edu.cn/publications
+
+
+
+                                         © 2020 IEEE. Personal use of this material is permitted. Permission from IEEE must be obtained for all other uses,
+                                         in any current or future media, including reprinting/republishing this material for advertising or promotional purposes,
+                                         creating new collective works, for resale or redistribution to servers or lists, or reuse of any copyrighted component of
+                                         this work in other works.
+                               3DRef: 3D Dataset and Benchmark for
+                             Reflection Detection in RGB and Lidar Data
+
+                                Xiting Zhao        Sören Schwertfeger
+ ShanghaiTech University, Key Laboratory of Intelligent Perception and Human-Machine Collaboration –
+                        ShanghaiTech University, Ministry of Education, China
+                                        {zhaoxt, soerensch}@shanghaitech.edu.cn
+
+
+
+                         Abstract                                 The reflections from water, mirrors, glass, and windows re-
+                                                                  main problematic, particularly for applications such as in-
+    Reflective surfaces present a persistent challenge for        ventory robots, service robots, and autonomous delivery ve-
+reliable 3D mapping and perception in robotics and au-            hicles, which require accurate mapping and localization to
+tonomous systems. However, existing reflection datasets           function reliably in reflections environment. For instance,
+and benchmarks remain limited to sparse 2D data. This             glass buildings tend to generate phantom walls, thereby
+paper introduces the first large-scale 3D reflection detec-       constraining drivable space estimates. Therefore, to per-
+tion dataset containing more than 50,000 aligned samples          form their tasks reliably, all robotic systems across indus-
+of multi-return Lidar, RGB images, and 2D/3D semantic la-         trial, urban, and domestic settings must effectively handle
+bels across diverse indoor environments with various reflec-      reflective surfaces.
+tions. Textured 3D ground truth meshes enable automatic
+point cloud labeling to provide precise ground truth anno-
+tations. Detailed benchmarks evaluate three Lidar point
+cloud segmentation methods, as well as current state-of-the-
+art image segmentation networks for glass and mirror de-
+tection. The proposed dataset advances reflection detection
+by providing a comprehensive testbed with precise global
+alignment, multi-modal data, and diverse reflective objects
+and materials. It will drive future research towards reli-
+able reflection detection. The dataset is publicly available
+at http://3dref.github.io
+
+
+1. Introduction
+Detecting reflective surfaces such as glass and mirrors
+presents a long-standing challenge in 3D computer vision
+and robotics. Frequently, for mobile robots employing 2D
+Lidar for mapping and navigation, spurious reflections from
+glass or mirrors give rise to ”phantom” walls in occupancy
+grid maps. This phenomenon leads to motion planning fail-
+ures, as the robot tends to avoid traversing these false obsta-   Figure 1. The 3DRef dataset uses a labeled mesh to provide multi-
+cles [34]. Similarly, robot systems relying on depth or RGB       modal reflection detection data, including three different multi-
+cameras also encounter difficulties when scanning reflective      return Lidar and RGB image with mask. The label across all re-
+objects like glass or shiny surfaces.                             flective material including glass, mirror and other reflective ob-
+   While applications like autonomous vehicles primarily          jects.
+operate in outdoor environments with less pervasive reflec-
+tive surfaces, indoor settings like offices, homes, and fac-         Recent trends indicate increasing utilization of 3D Li-
+tories introduce a higher degree of reflective challenges.        dar sensors such as Ouster and Livox for 3D mapping and
+odometry [16][27]. The advent of 3D Lidars like Velo-            and process. Section 4 describes our proposed dataset in-
+dyne, Ouster, and Livox unlocked the capability to sense a       cluding the annotation methodology and statistics. Section
+scene from various view points, potentially enabling reflec-     5 presents benchmark results assessing current Lidar and
+tion disambiguation. However, mirror-like reflections re-        RGB-based approaches on our new benchmark. Finally,
+main problematic for 3D Lidar sensors. Reflective objects        Section 6 concludes with a summary and directions for fu-
+defy the prevalent assumption in Lidar processing, which         ture work.
+argues that each laser pulse generates a return point by re-
+flecting off the closest surface in its path. Conversely, mir-   2. Related Works
+rors can cause secondary reflections when the beam contin-
+ues traveling and reflects off other objects. Factors such as    We consider prior work in two related topic areas: reflection
+distance, incident angle, Lidar return strategy, and material    datasets and reflection detection methods.
+property significantly influence the Lidar point result. Li-
+dar sensors may return the point on reflective material, the     2.1. Reflection Datasets
+obstacle behind transparent reflective material, the wrong
+reflection point, or fail to return any point due to the laser        Dataset       Modalities       Samples          Objects
+being absorbed by the material [41], leading to phantom              GDD[22]           RGB             3900             glass
+points that severely impair sensor models used for mapping,          GSD[19]           RGB             4102             glass
+localization, and navigation.                                      RGBP-G[23]         RGB-P           4511              glass
+                                                                     MSD[37]           RGB            4018             mirror
+    The surge towards autonomous robots at scale has re-
+                                                                     PMD[18]           RGB            6461             mirror
+vived interest in detecting reflections. Detecting and han-        RGBD-M[35]         RGB-D           3049             mirror
+dling reflective surfaces has been an active area of research      Mirror3D[30]       RGB-D           5894             mirror
+in robotics for decades. Several approaches using Lidar,            TROSD[29]         RGB-D           11060        mirror&glass
+RGB camera, RGBD camera, and sensor fusion methods,                3DRef (Ours)     Lidar, RGB     48024, 3799     all reflective
+have been proposed to address this challenge. However,
+these mostly operate in 2D, including 2D images, 2D maps,        Table 1. Comparison with existing glass and mirror object datasets
+and 2D Lidar [24]. Modern multi-return 3D Lidars pro-
+vide new opportunities, capturing multiple returns per laser        Although there are many Lidar indoor and outdoor
+pulse reflecting off different object along its path. However,   datasets [4, 6, 26], none of them contain labels for reflec-
+most current methods only utilize one return, missing crit-      tive surfaces. For RGB images, several datasets have been
+ical information in intermediate bounces. The return num-        introduced for glass and mirror detection using deep learn-
+bers of a point in a Lidar point cloud indicate which return     ing, as summarized in Table 1. However, most only con-
+the pulse belongs to. This information can help identify         tain one kind of 2D image masks rather than full 3D an-
+different kinds of objects and surfaces, such as glass and       notations. Some use limited samples from existing RGB-D
+reflections, that might otherwise be confused. Our work          datasets like Sun RGB-D [28] and Scannet [2]. Our pro-
+aims to advance robust reflection detection by introducing       posed dataset significantly advances the scope compared to
+the novel 3D Lidar multi-modal reflection detection dataset      prior work by providing a large-scale aligned 3D dataset
+and a benchmark survey of the state-of-the-art techniques.       with over 51800 samples across RGB images, multi-return
+    Our main contributions are as follows:                       Lidar point clouds, and semantic labels for different reflec-
+• A novel diverse benchmark dataset containing 51800+            tive surface types.
+   aligned data samples across RGB, Lidar, with labels for
+   3D reflection detection in indoor environments.               2.2. Reflection Detection Methods
+• Standardized ground truth representation via textured 3D
+                                                                 2.2.1   Reflection Detection Methods Using 3D Lidar
+   meshes and automatic point cloud labeling to precisely
+   annotate different reflective surface types beyond 2D         Several works have explored the detection and removal of
+   masks.                                                        reflective surfaces from 3D Lidar point clouds. Gao et al.
+• Benchmarking state-of-the-art reflection detection meth-       [5] proposed filtering reflective noise from large-scale 3D
+   ods to evaluate Lidar and RGB approaches, analyzing fac-      point clouds collected from multiple Lidar positions. Yun
+   tors like multi-return pulses.                                et al. [39, 40] introduced methods to identify and remove
+    The paper is structured as follows. Section 1 provides       reflective points from large-scale 3D point clouds. But these
+an introduction to the challenges of reflection detection and    three papers all deal with Terrestrial Laser Scanners and not
+motivation for a multi-modal 3D dataset. Section 2 reviews       the widely used 3D Lidar sensors. Koch et al. [17] detected
+related work on existing reflection datasets and detection       and removed specular reflections in 3D range measurements
+methods. Section 3 details our data collection platform          by analyzing triple return pulses from a rotating 2D Lidar.
+More recently, Henley et al. [12] used multi-bounce re-
+turns from a specialized multi spot Lidar system to detect
+and map specular surfaces in 3D. Zhao et al. [41] demon-
+strated detecting and utilizing Lidar reflections for mapping
+using a Velodyne 3D Lidar utilizing each dual return point
+cloud and using plane fitting and the intensity heap method
+to detect glass planes. These three papers demonstrate that
+leveraging the multi-return capability of Lidar sensors can
+benefit reflection detection. Foster et al. [3] propose the
+Reflectance Field Map, based on the concept of neural light
+fields from computer graphics. The method does not rely
+on intensity or multi-return measurements can handle dy-
+namic environments and different surfaces of reflectivity
+and transparency. But it still use 2D map for evaluation.
+
+
+2.2.2   Reflection Detection Methods Using RGB Cam-
+        eras
+
+A lot of learning based methods have been proposed for
+glass and mirror detection in images. Lin et al. [20] exploit
+                                                                                Figure 2. Data Collection Platform
+semantic relations for glass surface detection. Earlier Lin
+et al. [19] proposed aggregating rich context with reflec-
+                                                                        Sensor         Modalities            Data Collected
+tion priors for glass detection. Hu et al. [13] use multi-field
+                                                                     1.OS0-128       Spinning Lidar     Strongest, 2nd Strongest
+feature fusion and Transformers for glass segmentation. He
+                                                                    2.Livox Avia    Solid-state Lidar     First, Second, Third
+et al. [11] develop multi-level heterogeneous learning for          3.Hesai QT64     Spinning Lidar             First, Last
+efficient mirror detection. Guan et al. [8] learn semantic as-        4.Insta360    Fisheye Camera            RGB Image
+sociations to detect mirrors, while Huang et al. [14] employ
+symmetry-aware Transformers to detect mirrors.                                           Table 2. Sensors
+
+
+
+2.2.3   Other Reflection Detection Methods                        3.1. Polar 3D Scanner with Ouster Lidar and In-
+                                                                        sta360 camera
+Additionally, several other approaches employ sensor fu-          The Polar 3D Scanner is equipped with Ouster OS0-128
+sion or integrate multiple modalities like depth, or polar-       REV6 Lidar and an Insta360 ONE RS 1-Inch 360 Edition
+ization to detect reflections. Lin et al. [21] proposed           Camera. It also contains an Xsens Mti-630 IMU, enabling
+depth-aware glass surface detection with cross-modal con-         it to provide real-time environment scans and previews via
+text mining using RGBD data. Mei et al. [23] present glass        mobile phones. Additionally, its post-processing software
+segmentation using intensity and spectral polarization cues       allows the extraction of colored point clouds and textured
+from polarization cameras. Tao et al. [32] develop a glass        meshes, as well as raw RGB and Lidar data.
+recognition and map optimization method for mobile robots             The Ouster OS0-128 REV6 is an ultra-wide field-of-
+based on boundary guidance with sensor fusion. Han and            view spinning Lidar sensor with a 90° vertical field of view
+Sim [9] explore zero-shot learning for reflection removal in      and a range of 35m at 10 reflectivity. It has 128 channels
+360-degree images. Wei et al. [36] fusion 2D Lidar with           of resolution and can output up to 5.2 million points per
+ultrasound to detect the glass.                                   second. The L2X digital Lidar chip powers all of Ouster’s
+                                                                  latest Rev 06 OS series scanning sensors and is capable of
+3. Data Collection Platform                                       counting up to 1 trillion photons per second and outputting
+                                                                  up to 5.2 million points per second. The L2X chip can pro-
+To collect the reflection dataset, we employed a diverse          cess both the strongest and second strongest returns of light
+range of sensors listed in Table 2, including Ouster OS0-         for each point [25].
+128 Lidar, Livox Avia triple return Lidar, and Hesai Pandar           The Insta360 ONE RS 1-Inch 360 Edition is a dual 1-
+qt64 dual return Lidar. Additionally, we used an Insta360         inch sensor 6K 360 camera that delivers less noise, more de-
+camera to capture RGB images of the surroundings.                 tail and better shots. It has dual 1-inch rolling shutter Sony
+IMX283 sensors that capture 3072x3072 fisheye images for        containing challenging reflective surfaces. The dataset con-
+front and rear camera. These large sensors allow the camera     tains synchronized Lidar point clouds, RGB images, and
+to capture more light and detail, resulting in higher quality   ground truth annotations.
+images and videos [15].
+                                                                4.1. Data Collection Process
+3.2. Livox Avix Triple Return Lidar
+                                                                We handheld the multi-sensor platform and walk through
+The Livox Avia is a solid-state LiDAR sensor that combines      the environments, scanning from various angles and ranges.
+compact and lightweight design with improved detection          For each scene, we recorded multiple passes sampling dif-
+range and efficiency. It features an FOV greater than 70°       ferent viewpoints to capture reflections.
+and its triple-echo modes are ideal for use cases such as
+mapping and low-speed autonomous driving. Livox Avia            4.2. Data Annotation and Labeling
+has a point cloud data rate of up to 240,000 points/s in sin-   We propose utilizing a ground truth representation and point
+gle return mode [33].                                           cloud labels for the dataset. The ground truth representa-
+                                                                tion encompasses a texture mesh, with ground truth point
+3.3. Pandar Qt64 Dual Return Lidar
+                                                                cloud labels being automatically generated based on the Li-
+The Hesai Pandar QT64 is a short-range mechanical Lidar         dar’s pose. The mesh, generated from the Polar scanner,
+equipped with 64 channels of data for ultimate road protec-     was manually cleaned and fixed holes caused by glass re-
+tion. It has an ultra-wide vertical FOV of 104.2° (-52.1°       flections or other issues. Different types of reflections were
+to +52.1°) and a minimum vertical resolution of 1.45°. We       labeled on the texture images using different colors. We cat-
+record in dual return mode, which can get the first and last    egorized reflective surfaces into three types: glass, mirrors,
+return [7].                                                     and other reflective objects. As shown in Figure 3, the last
+                                                                category includes acrylic boards, whiteboards, TV screens,
+3.4. Time Sync and Calibration
+                                                                monitors, and glazed tiles. While these objects exhibit a
+With the use of the Precision Time Protocol (PTP) for hard-     lower reflectivity compared to glass and mirrors, they can
+ware synchronization, all three Lidar timestamps can be         still create problematic noise points and holes in Lidar data
+hardware synchronized within 1 ms. The Polar scanner            as well as bright overexposed regions in camera images.
+components, Ouster OS0-128 Lidar, Xsens IMU, and In-
+sta360 camera, are factory calibrated and synchronized by
+the manufacturer. An initial extrinsic calibration between
+three Lidars was provided by registering the all Lidar point
+cloud to a high-precision ground truth point cloud collected
+by a FARO scanner in the calibration field. This provides a
+rough estimate of the Lidar-to-Lidar transforms.
+   At run-time, the state-of-the-art mulitiple Lidar SLAM
+algorithm MA-LIO [16] performs online extrinsic cali-
+bration and temporal synchronization. By modeling the
+continuous-time trajectory using B-spline interpolation and
+propagating uncertainties, MA-LIO is able to accurately es-
+timate the time-varying extrinsic calibration between the Li-
+dars. It also compensates for any residual timestamp offsets
+                                                                              Figure 3. Other Reflective Objects
+to synchronize the asynchronous scans.
+   MA-LIO provides the synchronized trajectory along
+                                                                   After labeling the ground truth meshes, we utilize
+with undistorted and aligned point clouds from each Lidar
+                                                                Open3D [42] to propagate labels to the Lidar point clouds
+in the global frame. By explicitly handling the spatial and
+                                                                via ray-casting. The pose of each Lidar point cloud is used
+temporal discrepancies between Lidars, We can get precise
+                                                                to transform it into the mesh coordinate frame. Rays are
+real-time calibration and synchronization without requiring
+                                                                traced from the Lidar origin to each point, and ray-casting
+overlapping fields of view or strict hardware synchroniza-
+                                                                is performed against the labeled mesh. Points are then an-
+tion. The resulting point clouds are ready for direct fusion
+                                                                notated based on the ray-casting results. We assign the fol-
+and mapping without any further alignment steps.
+                                                                lowing labels:
+4. Dataset                                                         The labels categorize the different types of points that
+                                                                can arise in a 3D scan of reflective environments. Label 0
+We collect the Lidar reflection dataset in diverse indoor       refers to unlabeled points outside the mesh boundary. Label
+environments including office spaces, corridor, and rooms       1 denotes normal non-reflective surface points. The next
+  Data/size   Sensor    Normal     Glass   Mirror    OtherRef     Reflection    Obstacle    1stReturn     2ndReturn    3rdReturn
+              Ouster     84.19     0.91     0.61       2.85          9.31         0.66        99.72          0.28           /
+   Seq 1
+              Hesai      76.67     3.16     3.41       2.60         10.77         1.54        92.60          7.40           /
+   3732
+              Livox      52.23     4.73     1.72       2.42         29.22         7.62        86.30         11.63         2.07
+              Ouster     87.75     2.59     0.04       3.23          2.41         2.45        99.71          0.29           /
+   Seq 2
+              Hesai      78.64     7.48     0.28       3.14          3.79         4.16        93.82          6.17           /
+   4702
+              Livox      68.71     6.34     0.13       1.73         11.60         9.48        92.66          6.90         0.42
+              Ouster     87.05     2.17       /        2.76          1.67         3.64        99.62          0.38           /
+   Seq 3
+              Hesai      76.97     7.76       /        2.14          3.41         5.46        92.13          7.87           /
+   7574
+              Livox      55.78     5.33       /        1.29         14.34        19.28        83.49         14.33         2.17
+
+                            Table 3. Percent of Point Label and Return in Each Sequence for each sensor
+
+
+three labels indicate points on glass, mirror, and other re-
+flective object surfaces, respectively. Label 5 marks reflec-
+tion points corresponding to virtual objects rather than real
+surfaces. Finally, label 6 identifies points from surfaces oc-
+cluded behind transparent objects like glass. To maintain
+clarity, the color coding of labels in the dataset matches
+the colors used to visualize labeled points in the figures
+throughout the following paper.
+
+
+        0:Unlabeled       1:Normal Points        2:Glass
+           3:Mirrors      4:Other Reflective Objects
+      5:Reflection Points        6:Obstacle behind Glass                       Figure 4. Sequence 1: Corridor with Mirrors
+
+
+   To generate labels for the RGB images, we render the
+camera view on the labeled mesh using Open3D, leveraging
+the camera pose and intrinsic. Masks are extracted based on
+the rendered texture colors. For compatibility with existing
+deep learning methods, we undistort the fisheye images to
+a pinhole camera model using the manufacturer’s provided
+intrinsic.
+   In total, the dataset contains 48024 labeled point clouds
+with 16008 point clouds per Lidar sensor across three se-
+quences. Additionally, there are 3799 labeled RGB images
+across the sequences.
+
+4.3. Dataset and Statistics
+                                                                                      Figure 5. Sequence 2: Rooms
+The dataset contains three sequences captured in different
+indoor environments. Table 3 provides label statistics and
+return numbers statistics for each Lidar sensor. We observe         4.3.1   Sequence 1: Corridor with Mirrors
+that while the Ouster Lidar is dual-return, very few (<0.4%)
+points have the second return compared to the other Lidars.         Sequence 1, visualized in Figure 4, contains 3732 point
+   We visualize the labeled mesh and point clouds in the            clouds per Lidar and 541 RGB images. It features a corridor
+Figures 4, 5 and 6 and describe each sequence below. The            with wall-mounted mirrors that reflect the opposite wall and
+images show the defined color coding for each label. The            ceiling. Additionally, there is a passage with many floor-
+red line indicates the data collection trajectory. For better       to-ceiling windows showing views outside. This sequence
+visualization, point clouds are subsampled to 0.1m resolu-          provides challenging mirror reflections as well as glass sur-
+tion and ceiling points are removed.                                faces and other reflective objects.
+                                                                    • Scripts: Helper scripts for dataset processing tasks like
+                                                                      raytracing, statistics and evaluation.
+                                                                    • Network: Code and weights for reflection detection net-
+                                                                      works like EBLNet, PCSeg, SATNet.
+
+                                                                    4.5. Dataset Analysis
+                                                                    Utilizing the labeled point clouds, we analyzed the multi-
+                                                                    return characteristics and the relationship between the laser
+                                                                    beam incident angle and different reflection types. The
+
+                                                                        Label        1st Return      2nd Return       3rd Return
+                                                                       Normal          99.02            0.97             0.01
+                  Figure 6. Sequence 3: Floor
+                                                                        Glass          99.61            0.39             0.00
+                                                                       Mirror          98.74            1.26             0.00
+4.3.2   Sequence 2: Rooms                                             OtherRef         99.82            0.18             0.00
+                                                                      Reflection       77.16           22.07             0.77
+Sequence 2, shown in Figure 5, consists of 4702 point                 Obstacle         62.20           33.38             4.43
+clouds per Lidar and 1716 RGB images captured in an office
+environment. It includes office rooms, a conference room                 Table 4. The percent of different labels in each return
+with glass all-around, hallways with glass doors and rail-
+ings looking outside, as well as mirrors and other reflective
+                                                                    analysis in Table 4 provides insights into detecting reflec-
+objects. This provides a diverse set of transparent, reflec-
+                                                                    tions using multi-return Lidar. For normal, glass, mirror,
+tive, and glass surfaces.
+                                                                    and other reflective object points, nearly all points appear in
+                                                                    the first return, with under 1% in later returns. This matches
+4.3.3   Sequence 3: Floor                                           expectations since these kind of surfaces immediately re-
+                                                                    flect the Lidar beam. The small fraction of later returns may
+Sequence 3, visualized in Figure 6, comprises 7574 point            arise from sensor noise.
+clouds per Lidar and 1542 RGB images captured on a floor
+                                                                        In contrast, reflection points and obstacles behind glass
+with rooms, meeting rooms, floor-to-ceiling windows, glass
+                                                                    exhibit substantially higher ratios (22-33%) in the second
+railings, and several reflective objects including posters,
+                                                                    return compared to other classes. In the third return, ob-
+whiteboards, and wall-mounted TVs. This provides many
+                                                                    stacles behind glass dominate, with some remaining reflec-
+examples of reflective surfaces beyond just glass and mir-
+                                                                    tions. Leveraging the return channel enables identifying
+rors.
+                                                                    more reflections and obstacle behind versus using just the
+4.4. Dataset Structure                                              first return. This demonstrates the value of multi-return Li-
+                                                                    dar data for robust reflection analysis.
+The provided dataset includes four main parts: Raw data,                Using the mesh normals and laser beam directions, we
+SemanticKitti Pointcloud, RGB Image, Scripts. Addition-             compute the incident angle for each point. Figure 7 plots
+ally, we provide trained models on our new dataset to en-           the percentage of points belonging to each reflective label
+able out-of-the-box evaluation. The dataset structure is or-        versus incident angle, with each line add up to 100% across
+ganized as follows:                                                 angles. For normal points, the percentage first increases to-
+• Raw: Contains the raw sensor data for each sequence,              wards grazing angles then decrease at higher incident angle,
+  including Lidar pose files, images, labeled meshes, origin        as most Lidar beams from wide FOV Lidar do not strike sur-
+  textured meshes, labeled ray-casting point clouds, camera         faces head-on. In contrast, glass and mirrors have a higher
+  extrinsic and intrinsic.                                          percentage of direct returns occur at lower incident angle
+• RGB: Contains the RGB images and masks for different              where the beam is closer to perpendicular. As the incident
+  labels (glass, mirror, other reflective, all reflective), split   angle increases, fewer specular returns persist. For obstacle
+  into train and test folders for each. All reflective means        behind, other reflective objects and reflection points exhibit
+  labels including glass, mirror and other reflective objects.      higher percentages at moderate incident angle and fewer
+• SemanticKitti: Labeled point clouds in SemanticKitti              points at higher angles. This analysis shows that a more
+  format with 4 (x,y,z,intensity) and 5 channels                    frontal Lidar view yields more direct returns from glass and
+  (x,y,z,intensity,return) for benchmark.                           mirrors, while a grazing angle causes more reflections.
+     Methods          Return     Sensor     Total      Normal          Glass    Mirror    Other Reflective    Reflection   Obstacle
+   Minkowski[1]         N         All      81.5479     96.5204        69.395   76.5126       84.9613           84.4523      77.446
+   SPVCNN[31]           N         All      81.8484     96.5277       69.7724   77.7727       84.1454           84.7161      78.156
+  Cylinder3D[43]        N         All      83.7196     96.8398       69.7819   79.8688       83.7576           88.5802     83.4894
+   Minkowsk[1]          Y         All      82.1131     96.7489       70.2697   74.3789       84.9468           86.4367     79.8977
+   SPVCNN[31]           Y         All      82.1435     96.6711       69.4181   77.6020       86.4166           84.8909     77.8623
+  Cylinder3D[43]        Y         All      83.9188     96.9597       70.0164   79.6803       83.5822           89.2830     83.9912
+  Cylinder3D[43]        Y        Ouster    79.7141     97.8982       58.2692   59.3531       88.0816            90.505     84.1773
+  Cylinder3D[43]        Y        Hesai     84.9809     96.5099       78.6898   88.4585       80.8066           86.5446     78.8758
+  Cylinder3D[43]        Y        Livox     85.9603     93.5877       72.6401   85.7264       87.8459           89.3691     86.5924
+
+                                               Table 5. Lidar Benchmark Results (mIOU)
+
+
+                                                                        5.1. Benchmark Setup
+                                                                        Our benchmarking process is conducted on a computer
+                                                                        equipped with dual NVIDIA RTX3090 GPUs, with 24GB
+                                                                        of GPU memory each. For Lidar-based detection, the orig-
+                                                                        inal SemanticKitti dataset format only provides 4 channels
+                                                                        (x, y, z, intensity) per point. To compare the result of adding
+                                                                        return information for each point, we made modifications to
+                                                                        the PCSeg code to give 5 channels (x, y, z, intensity, return)
+                                                                        per point. For RGB-based detection, we compare the re-
+                                                                        sults using a pretrained model and, subsequently, retraining
+                                                                        the model using our dataset of glass and alllabels.
+
+                                                                        5.2. Benchmark Results and Ablation Study
+
+                                                                              Methods             Dataset         Model      mIOU
+Figure 7. Percentage of labels relative to the laser beam incident        GlassSemNet[20]          GDD             V2        90.80
+angle.                                                                    GlassSemNet[20]       3DRef-Glass        V2        53.69
+                                                                             HetNet[11]            PMD            PMD        69.00
+                                                                             HetNet[11]         3DRef-Mirror      PMD        44.05
+5. Benchmark Evaluation                                                      SATNet[14]           RGBD            RGBD       78.42
+                                                                             SATNet[14]         3DRef-Mirror      RGBD       49.46
+We benchmark various reflection detection methods on our
+                                                                            EBLNet[10]             GDD            GDD        88.72
+dataset, including Lidar-based and RGB-based approaches.
+                                                                            EBLNet[10]          3DRef-Glass       GDD        60.49
+The Lidar-based approach uses point cloud geometry to
+                                                                            EBLNet[10]             MSD            MSD        80.33
+detect reflective points and categorize them, whereas the
+                                                                            EBLNet[10]          3DRef-Mirror      MSD        57.61
+RGB-only method relies purely on RGB data for reflection
+                                                                            *SATNet[14]         3DRef-Mirror        /        82.47
+point detection.
+                                                                            *SATNet[14]          3DRef-All          /        68.81
+    For point cloud analysis, we leverage the open-source                  *EBLNet[10]          3DRef-Glass         /        86.71
+PCSeg codebase [38], which implements Minkowsk-                            *EBLNet[10]           3DRef-All          /        87.60
+iNet [1], Cylinder3D [43], and SPVCNN [31] segmentation
+methods. These geometrically analyze the 3D points to de-               Table 6. RGB Benchmark Results. Model refers to the pre-
+tect reflective surfaces.                                               trained model name. Asterisk (*) denotes networks retrained on
+    For RGB analysis, we evaluate the state-of-the-art                  the 3DRef dataset.
+GlassSemNet [20] and EBLNet [10] for glass, along with
+HetNet [11] and SATnet [14] for mirror detection. Some                     Table 5 shows the benchmark results for Lidar-based re-
+methods provide only pretrained models for testing but                  flection detection methods using just XYZI (4 channels)
+without training code, so we directly evaluate these pre-               versus adding the return channel (XYZIR, 5 channels).
+trained models on our dataset. We also retrain SATnet and                  Adding the explicit return channel improves mIOU by
+EBLNet on our new reflection-labeled RGB images of glass                0.5% across methods, demonstrating its value for identi-
+and all reflective to compare performance gains.                        fying reflective points. However, the gain is limited since
+some Lidars (e.g. Ouster) have very few dual returns and          ambiguation. Enabling autonomous robots and vehicles to
+different Lidar has different retrun type. Still, leveraging      accurately perceive and map reflective environments will be
+multi-return patterns enables detecting more reflections.         key to unlocking real-world operation.
+    Among sensors, Livox achieves the highest accuracy,               Acknowledgements: This work has been partially
+while Ouster struggles on glass and mirror classes. As            funded by the Shanghai Frontiers Science Center of
+shown in Table 3, Ouster initially detects fewer glass and        Human-centered Artificial Intelligence. This work was
+mirror points compared to the other Lidars. This likely con-      also supported by the Science and Technology Commission
+tributes to its lower detection rate on those classes. Overall    of Shanghai Municipality (STCSM), project 22JC1410700
+these results demonstrate multi-return Lidar’s advantages         ”Evaluation of real-time localization and mapping algo-
+for analyzing reflective surfaces.                                rithms for intelligent robots”.
+    Table 6 benchmarks RGB methods using default pre-
+trained models versus retraining on 3DRef. Retraining             References
+substantially improves performance for glass detection.
+EBLNet’s glass mIoU increases from 60.49% to 86.71% af-            [1] Christopher Choy, JunYoung Gwak, and Silvio Savarese. 4d
+ter retraining. For mirrors, retrained SATNet’s mIoU rises             spatio-temporal convnets: Minkowski convolutional neural
+                                                                       networks. In Proceedings of the IEEE Conference on Com-
+from 49.46% to 82.47%. This highlights the domain gap be-
+                                                                       puter Vision and Pattern Recognition, pages 3075–3084,
+tween existing datasets and our new benchmark. Retrained
+                                                                       2019. 8
+SATNet also achieves a strong 87.6% mIoU on all reflective
+                                                                   [2] Angela Dai, Angel X Chang, Manolis Savva, Maciej Hal-
+classes, indicating it generalizes well to diverse reflections.        ber, Thomas Funkhouser, and Matthias Nießner. Scannet:
+    In summary, retraining on our large-scale multi-modal              Richly-annotated 3d reconstructions of indoor scenes. In
+dataset leads to major performance boosts, confirming its              Proceedings of the IEEE conference on computer vision and
+value for advancing reflection detection networks. The vari-           pattern recognition, pages 5828–5839, 2017. 3
+ety of reflective environments and aligned multi-sensor data       [3] Paul Foster, Collin Johnson, and Benjamin Kuipers. The re-
+enables robust models that can handle real-world deploy-               flectance field map: Mapping glass and specular surfaces in
+ment challenges.                                                       dynamic environments. In 2023 IEEE International Confer-
+                                                                       ence on Robotics and Automation (ICRA), pages 8393–8399.
+6. Conclusion                                                          IEEE, 2023. 4
+                                                                   [4] Ling Gao, Yuxuan Liang, Jiaqi Yang, Shaoxun Wu, Chenyu
+This work introduces a large-scale multi-modal 3D dataset              Wang, Jiaben Chen, and Laurent Kneip. Vector: A versa-
+to advance robust reflection detection, enabling reliable per-         tile event-centric benchmark for multi-sensor slam. IEEE
+ception to reflective surfaces. The diverse environments,              Robotics and Automation Letters, 7(3):8217–8224, 2022. 3
+precise ground truth annotations, and analysis of current          [5] Rui Gao, Jisun Park, Xiaohang Hu, Seungjun Yang, and
+methods confirm the value of leveraging aligned Lidar and              Kyungeun Cho. Reflective noise filtering of large-scale point
+RGB data. Detailed benchmarks assess the performance                   cloud using multi-position lidar sensing data. Remote Sens-
+of current Lidar point cloud and RGB image segmentation                ing, 13(16):3058, 2021. 3
+methods, providing insights into factors like multi-return         [6] Andreas Geiger, Philip Lenz, Christoph Stiller, and Raquel
+analysis. Detailed benchmarks demonstrate significant per-             Urtasun. Vision meets robotics: The kitti dataset. The Inter-
+formance gains from retraining models on this data com-                national Journal of Robotics Research, 32(11):1231–1237,
+pared to pretrained networks. This highlights the need for             2013. 3
+comprehensive reflective data to handle real-world deploy-         [7] Hesai Group. QT64 — 64-Channel Short-Range Lidar —
+ment challenges.                                                       HESAI Technology — hesaitech.com. https://www.
+    Several fruitful directions exist for future work. Ex-             hesaitech.com/product/qt64/, 2023. [Accessed
+                                                                       27-07-2023]. 5
+panding the diversity of datasets across sensors, materi-
+                                                                   [8] Huankang Guan, Jiaying Lin, and Rynson WH Lau. Learn-
+als, and environments will further boost detection robust-
+                                                                       ing semantic associations for mirror detection. In Proceed-
+ness. Additionally, fusing Lidar and RGB reflection detec-
+                                                                       ings of the IEEE/CVF Conference on Computer Vision and
+tion networks is a promising approach to combine geomet-               Pattern Recognition, pages 5941–5950, 2022. 4
+ric and semantic cues. Exploring different sensor modalities
+                                                                   [9] Byeong-Ju Han and Jae-Young Sim. Zero-shot learning for
+like depth and polarization represents another opportunity.            reflection removal of single 360-degree image. In European
+Moving beyond supervised learning with self-supervised                 Conference on Computer Vision, pages 533–548. Springer,
+and semi-supervised techniques is also valuable.                       2022. 4
+    This benchmark dataset lays the groundwork to drive           [10] Hao He, Xiangtai Li, Guangliang Cheng, Jianping Shi, Yun-
+future research towards reflection disambiguation and ro-              hai Tong, Gaofeng Meng, Véronique Prinet, and LuBin
+bust 3D mapping. The comprehensive testbed will continue               Weng. Enhanced boundary learning for glass-like object seg-
+driving future research and methods towards reflection dis-            mentation. In Proceedings of the IEEE/CVF International
+     Conference on Computer Vision, pages 15859–15868, 2021.               ference on Computer Vision and Pattern Recognition, pages
+     8                                                                     12622–12631, 2022. 3, 4
+[11] Ruozhen He, Jiaying Lin, and Rynson WH Lau. Efficient            [24] Qian Mo, Yuhuai Zhou, Xiaolei Zhao, Xinglin Quan, and Yi-
+     mirror detection via multi-level heterogeneous learning. In           hua Chen. A survey on recent reflective detection methods
+     Proceedings of the AAAI Conference on Artificial Intelli-             in simultaneous localization and mapping for robot applica-
+     gence, pages 790–798, 2023. 4, 8                                      tions. In 2023 6th International Symposium on Autonomous
+[12] Connor Henley, Siddharth Somasundaram, Joseph Holl-                   Systems (ISAS), pages 1–6. IEEE, 2023. 3
+     mann, and Ramesh Raskar. Detection and mapping of specu-         [25] Inc. Ouster. ouster os0-128 rev6 datasheet. https :
+     lar surfaces using multibounce lidar returns. Optics Express,         / / data . ouster . io / downloads / datasheets /
+     31(4):6370–6388, 2023. 4                                              datasheet-rev06-v2p5-os0.pdf, 2023. [Accessed
+[13] Xiaohang Hu, Rui Gao, Seungjun Yang, and Kyungeun Cho.                27-07-2023]. 4
+     Tgsnet: Multi-field feature fusion for glass region segmenta-    [26] Milad Ramezani, Yiduo Wang, Marco Camurri, David
+     tion using transformers. Mathematics, 11(4):843, 2023. 4              Wisth, Matias Mattamala, and Maurice Fallon. The newer
+[14] Tianyu Huang, Bowen Dong, Jiaying Lin, Xiaohui Liu,                   college dataset: Handheld lidar, inertial and vision with
+     Rynson WH Lau, and Wangmeng Zuo. Symmetry-aware                       ground truth. In 2020 IEEE/RSJ International Conference
+     transformer-based mirror detection. In Proceedings of the             on Intelligent Robots and Systems (IROS), pages 4353–4360.
+     AAAI Conference on Artificial Intelligence, pages 935–943,            IEEE, 2020. 3
+     2023. 4, 8                                                       [27] Tixiao Shan, Brendan Englot, Drew Meyers, Wei Wang,
+                                                                           Carlo Ratti, and Rus Daniela. Lio-sam: Tightly-coupled lidar
+[15] insta360. Insta360 ONE RS 1-Inch 360 Edition – Dual 1-
+                                                                           inertial odometry via smoothing and mapping. In IEEE/RSJ
+     Inch Sensor 6K 360 Camera — insta360.com. https://
+                                                                           International Conference on Intelligent Robots and Systems
+     www.insta360.com/product/insta360-oners/
+                                                                           (IROS), pages 5135–5142. IEEE, 2020. 3
+     1inch-360, 2023. [Accessed 27-07-2023]. 5
+                                                                      [28] Shuran Song, Samuel P Lichtenberg, and Jianxiong Xiao.
+[16] Minwoo Jung, Sangwoo Jung, and Ayoung Kim. Asyn-
+                                                                           Sun rgb-d: A rgb-d scene understanding benchmark suite. In
+     chronous multiple lidar-inertial odometry using point-wise
+                                                                           Proceedings of the IEEE conference on computer vision and
+     inter-lidar uncertainty propagation. IEEE Robotics and Au-
+                                                                           pattern recognition, pages 567–576, 2015. 3
+     tomation Letters, 2023. 3, 5
+                                                                      [29] Tianyu Sun, Guodong Zhang, Wenming Yang, Jing-Hao
+[17] R Koch, S May, and A Nüchter. Detection and purging of
+                                                                           Xue, and Guijin Wang. Trosd: A new rgb-d dataset for trans-
+     specular reflective and transparent object influences in 3d
+                                                                           parent and reflective object segmentation in practice. IEEE
+     range measurements. The International Archives of the Pho-
+                                                                           Transactions on Circuits and Systems for Video Technology,
+     togrammetry, Remote Sensing and Spatial Information Sci-
+                                                                           2023. 3
+     ences, 42:377–384, 2017. 3
+                                                                      [30] Jiaqi Tan, Weijie Lin, Angel X Chang, and Manolis Savva.
+[18] Jiaying Lin, Guodong Wang, and Rynson WH Lau. Progres-                Mirror3d: Depth refinement for mirror surfaces. In Proceed-
+     sive mirror detection. In Proceedings of the IEEE/CVF Con-            ings of the IEEE/CVF Conference on Computer Vision and
+     ference on Computer Vision and Pattern Recognition, pages             Pattern Recognition, pages 15990–15999, 2021. 3
+     3697–3705, 2020. 3                                               [31] Haotian Tang, Zhijian Liu, Shengyu Zhao, Yujun Lin, Ji Lin,
+[19] Jiaying Lin, Zebang He, and Rynson WH Lau. Rich context               Hanrui Wang, and Song Han. Searching efficient 3d architec-
+     aggregation with reflection prior for glass surface detection.        tures with sparse point-voxel convolution. In European con-
+     In Proceedings of the IEEE/CVF Conference on Computer                 ference on computer vision, pages 685–702. Springer, 2020.
+     Vision and Pattern Recognition, pages 13415–13424, 2021.              8
+     3, 4                                                             [32] Yong Tao, He Gao, Yufang Wen, Lian Duan, and Jiangbo
+[20] Jiaying Lin, Yuen-Hei Yeung, and Rynson Lau. Exploiting               Lan. Glass recognition and map optimization method for
+     semantic relations for glass surface detection. Advances in           mobile robot based on boundary guidance. Chinese Journal
+     Neural Information Processing Systems, 35:22490–22504,                of Mechanical Engineering, 36(1):1–12, 2023. 4
+     2022. 4, 8                                                       [33] Livox Technology. Specs - Avia LiDAR sensor - Livox
+[21] Jiaying Lin, Yuen Hei Yeung, and Rynson WH Lau. Depth-                — livoxtech.com. https://www.livoxtech.com/
+     aware glass surface detection with cross-modal context min-           avia/specs, 2023. [Accessed 27-07-2023]. 5
+     ing. arXiv preprint arXiv:2206.11250, 2022. 4                    [34] Haileleol Tibebu, Jamie Roche, Varuna De Silva, and Ah-
+[22] Haiyang Mei, Xin Yang, Yang Wang, Yuanyuan Liu,                       met Kondoz. Lidar-based glass detection for improved occu-
+     Shengfeng He, Qiang Zhang, Xiaopeng Wei, and Ryn-                     pancy grid mapping. Sensors, 21(7):2263, 2021. 2
+     son WH Lau. Don’t hit me! glass detection in real-               [35] Weiyue Wang and Ulrich Neumann. Depth-aware cnn for
+     world scenes. In Proceedings of the IEEE/CVF Conference               rgb-d segmentation. In Proceedings of the European con-
+     on Computer Vision and Pattern Recognition, pages 3687–               ference on computer vision (ECCV), pages 135–150, 2018.
+     3696, 2020. 3                                                         3
+[23] Haiyang Mei, Bo Dong, Wen Dong, Jiaxi Yang, Seung-               [36] Hao Wei, Xue-en Li, Ying Shi, Bo You, and Yi Xu. Multi-
+     Hwan Baek, Felix Heide, Pieter Peers, Xiaopeng Wei, and               sensor fusion glass detection for robot navigation and map-
+     Xin Yang. Glass segmentation using intensity and spectral             ping. In 2018 WRC Symposium on Advanced Robotics and
+     polarization cues. In Proceedings of the IEEE/CVF Con-                Automation (WRC SARA), pages 184–188. IEEE, 2018. 4
+[37] Xin Yang, Haiyang Mei, Ke Xu, Xiaopeng Wei, Baocai Yin,
+     and Rynson WH Lau. Where is my mirror? In Proceedings
+     of the IEEE/CVF International Conference on Computer Vi-
+     sion, pages 8809–8818, 2019. 3
+[38] Liu Youquan, Bai Yeqi, Kong Lingdong, Chen Runnan, Hou
+     Yuenan, Shi Botian, and Li Yikang. Pcseg: An open source
+     point cloud segmentation codebase. https://github.
+     com/PJLab-ADG/PCSeg, 2023. 8
+[39] Jae-Seong Yun and Jae-Young Sim. Reflection removal for
+     large-scale 3d point clouds. In Proceedings of the IEEE Con-
+     ference on Computer Vision and Pattern Recognition, pages
+     4597–4605, 2018. 3
+[40] Jae-Seong Yun and Jae-Young Sim. Virtual point removal for
+     large-scale 3d point clouds with multiple glass planes. IEEE
+     Transactions on Pattern Analysis and Machine Intelligence,
+     43(2):729–744, 2019. 3
+[41] Xiting Zhao, Zhijie Yang, and Sören Schwertfeger. Mapping
+     with reflection-detection and utilization of reflection in 3d li-
+     dar scans. In 2020 IEEE International Symposium on Safety,
+     Security, and Rescue Robotics (SSRR), pages 27–33. IEEE,
+     2020. 3, 4
+[42] Qian-Yi Zhou, Jaesik Park, and Vladlen Koltun. Open3D: A
+     modern library for 3D data processing. arXiv:1801.09847,
+     2018. 5
+[43] Xinge Zhu, Hui Zhou, Tai Wang, Fangzhou Hong, Yuexin
+     Ma, Wei Li, Hongsheng Li, and Dahua Lin. Cylindrical
+     and asymmetrical 3d convolution networks for lidar seg-
+     mentation. In Proceedings of the IEEE/CVF conference on
+     computer vision and pattern recognition, pages 9939–9948,
+     2021. 8
+
